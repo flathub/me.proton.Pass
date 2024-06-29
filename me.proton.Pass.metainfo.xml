@@ -1,13 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright 2024 proletarius101 -->
 <component type="desktop-application">
     <id>me.proton.Pass</id>
 
     <name>Proton Pass</name>
-    <summary>Open-source and encrypted password manager to keep your login credentials safe</summary>
+    <summary>Encrypted password manager to keep your login credentials safe</summary>
 
     <metadata_license>CC0-1.0</metadata_license>
     <project_license>GPL-3.0</project_license>
     <developer_name>Proton AG</developer_name>
+    <developer id="ch.protonmail">
+        <name>Proton AG</name>
+    </developer>
+    <project_group>Proton</project_group>
 
     <description>
         <p>
@@ -117,16 +122,19 @@
     <url type="vcs-browser">https://github.com/ProtonMail/WebClients</url>
     <url type="contact">https://proton.me/support/troubleshooting?product=pass</url>
     <url type="help">https://proton.me/support/pass</url>
+    <url type="translate">https://proton.me/blog/translation-community</url>
 
     <launchable type="desktop-id">me.proton.Pass.desktop</launchable>
     <screenshots>
-        <screenshot type="default">
+        <screenshot type="default" xml:lang="en">
             <image>
                 https://res.cloudinary.com/dbulfrlrz/images/w_1024,h_658,c_scale/f_auto,q_auto/v1707558912/wp-pme/proton-pass-web-app-overview/proton-pass-web-app-overview.png</image>
         </screenshot>
     </screenshots>
 
-    <content_rating type="oars-1.1" />
+    <content_rating type="oars-1.1">
+        <content_attribute id="money-purchasing">intense</content_attribute>
+    </content_rating>
 
     <releases>
         <release version="1.16.1" date="2024-03-21" />
