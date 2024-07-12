@@ -47,8 +47,8 @@ modules:
       - type: file
         dest-filename: ProtonPass.deb
         only-arches: [x86_64]
-        url: https://proton.me/download/PassDesktop/linux/x64/ProtonPass_1.20.0.deb
-        sha256: c87d094fec7c3dbe9a74de7650519f4e95b7fb42e69f285f16c55282b315958b
+        url: https://proton.me/download/PassDesktop/linux/x64/ProtonPass_1.20.1.deb
+        sha256: 1b5e3f8157afbdc715f082cfafbd3520ff24ad1dbf98e9d19f489c08fd478b8b
         x-checker-data:
           type: json
           # https://github.com/ProtonMail/WebClients/blob/d1a23fc2c4ab1e1632118baaee6f2531022ae4cf/applications/pass-desktop/tools/deploy.sh#L127
