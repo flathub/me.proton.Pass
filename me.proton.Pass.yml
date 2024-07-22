@@ -6,8 +6,6 @@ base: org.electronjs.Electron2.BaseApp
 base-version: *runtime-version
 command: start-proton-pass
 finish-args:
-  # camera access for moments
-  - --device=all
   - --share=ipc
   - --share=network
   - --socket=wayland
