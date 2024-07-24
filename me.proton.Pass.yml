@@ -10,6 +10,7 @@ finish-args:
   - --share=network
   - --socket=wayland
   - --socket=fallback-x11
+  - --device=dri
   - --talk-name=org.freedesktop.secrets
   - --env=USE_WAYLAND=1
   - --env=XCURSOR_PATH=~/.icons:/app/share/icons:/icons:/run/host/user-share/icons:/run/host/share/icons
