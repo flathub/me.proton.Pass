@@ -8,20 +8,29 @@ command: start-proton-pass
 finish-args:
   - --share=ipc
   - --share=network
-  - --socket=wayland
-  - --socket=fallback-x11
+  - --socket=x11
   - --device=all
   - --talk-name=org.freedesktop.secrets
   - --env=USE_WAYLAND=1
   - --env=XCURSOR_PATH=~/.icons:/app/share/icons:/icons:/run/host/user-share/icons:/run/host/share/icons
 modules:
   - shared-modules/libsecret/libsecret.json
+  - name: cobalt
+    buildsystem: meson
+    sources:
+      - type: git
+        url: https://github.com/refi64/cobalt
+        tag: v2024.04
+        commit: aeebabd4b6851f617c21867c429f81071fa3a876
+        x-checker-data:
+          type: git
+          tag-pattern: ^v([\d.]+)$
+
   - name: proton-pass
     buildsystem: simple
     build-commands:
       - bsdtar -Oxf ProtonPass.deb data.tar.xz | bsdtar -xf -
       - mv "usr/lib/proton-pass" ${FLATPAK_DEST}/proton-pass
-      - rm ${FLATPAK_DEST}/proton-pass/chrome-sandbox
 
       # To allow separate locales
       # https://searchfox.org/mozilla-central/rev/8a4f55bc09ffc5c25dcb4586c51ae4a9fee77b4c/taskcluster/docker/firefox-flatpak/runme.sh#131-133
@@ -40,6 +49,7 @@ modules:
 
       # Install the wrapper script to start it.
       - install -Dm 755 start-proton-pass.sh /app/bin/start-proton-pass
+      - install -Dm 644 -t /app/etc cobalt.ini
 
       - install -Dm644 me.proton.Pass.metainfo.xml /app/share/metainfo/$FLATPAK_ID.metainfo.xml
     sources:
@@ -63,23 +73,10 @@ modules:
       - type: script
         dest-filename: start-proton-pass.sh
         commands:
-          - |
-            set -oue pipefail
-
-            export FLATPAK_ID="${FLATPAK_ID}"
-            export TMPDIR="${XDG_RUNTIME_DIR}/app/${FLATPAK_ID}"
-
-            # Wayland support can be optionally enabled like so:
-            declare -i USE_WAYLAND="${USE_WAYLAND:-1}"
-            declare -i EXIT_CODE=0
-
-            if [[ "${USE_WAYLAND}" -eq 1 && "${XDG_SESSION_TYPE}" == "wayland" ]]; then
-                exec zypak-wrapper "/app/proton-pass/Proton Pass" --ozone-platform-hint=wayland --enable-features=WaylandWindowDecorations --gtk-version=4 $@ || EXIT_CODE=$?
-                # Fall back to x11 if failed to launch under Wayland. Otherwise, exit normally
-                [[ "${EXIT_CODE}" -ne 133 ]] && exit "${EXIT_CODE}"
-            fi
-
-            exec zypak-wrapper "/app/proton-pass/Proton Pass" $@
+          - exec cobalt "$@"
 
       - type: file
         path: me.proton.Pass.metainfo.xml
+
+      - type: file
+        path: cobalt.ini
