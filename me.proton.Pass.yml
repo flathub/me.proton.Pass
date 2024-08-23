@@ -8,24 +8,14 @@ command: start-proton-pass
 finish-args:
   - --share=ipc
   - --share=network
-  - --socket=x11
+  - --socket=wayland
+  - --socket=fallback-x11
   - --device=all
   - --talk-name=org.freedesktop.secrets
-  - --env=USE_WAYLAND=1
+  - --env=ELECTRON_OZONE_PLATFORM_HINT=auto
   - --env=XCURSOR_PATH=~/.icons:/app/share/icons:/icons:/run/host/user-share/icons:/run/host/share/icons
 modules:
   - shared-modules/libsecret/libsecret.json
-  - name: cobalt
-    buildsystem: meson
-    sources:
-      - type: git
-        url: https://github.com/refi64/cobalt
-        tag: v2024.04
-        commit: aeebabd4b6851f617c21867c429f81071fa3a876
-        x-checker-data:
-          type: git
-          tag-pattern: ^v([\d.]+)$
-
   - name: proton-pass
     buildsystem: simple
     build-commands:
@@ -49,8 +39,6 @@ modules:
 
       # Install the wrapper script to start it.
       - install -Dm 755 start-proton-pass.sh /app/bin/start-proton-pass
-      - install -Dm 644 -t /app/etc cobalt.ini
-
       - install -Dm644 me.proton.Pass.metainfo.xml /app/share/metainfo/$FLATPAK_ID.metainfo.xml
     sources:
       - type: file
@@ -75,10 +63,7 @@ modules:
       - type: script
         dest-filename: start-proton-pass.sh
         commands:
-          - exec cobalt "$@"
+          - exec zypak-wrapper "/app/proton-pass/Proton Pass" "$@"
 
       - type: file
         path: me.proton.Pass.metainfo.xml
-
-      - type: file
-        path: cobalt.ini
