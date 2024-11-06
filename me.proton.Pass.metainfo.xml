@@ -138,8 +138,11 @@
     </content_rating>
 
     <releases>
-        <release version="1.23.1" date="2024-10-07">
+        <release version="1.24.1" date="2024-10-31">
             <description></description>
+        </release>
+        <release version="1.23.1" date="2024-10-07">
+            <description/>
         </release>
         <release version="1.23.0" date="2024-09-20">
             <description/>
