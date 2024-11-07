@@ -12,6 +12,8 @@ finish-args:
   - --socket=fallback-x11
   - --device=all
   - --talk-name=org.freedesktop.secrets
+  # Tray icon
+  - --talk-name=org.kde.StatusNotifierWatcher
   - --env=ELECTRON_OZONE_PLATFORM_HINT=auto
   - --env=XCURSOR_PATH=~/.icons:/app/share/icons:/icons:/run/host/user-share/icons:/run/host/share/icons
 modules:
