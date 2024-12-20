@@ -72,9 +72,9 @@ modules:
       - type: file
         dest-filename: ProtonPass.deb
         only-arches: [x86_64]
-        url: https://proton.me/download/pass/linux/proton-pass_1.26.0_amd64.deb
+        url: https://proton.me/download/pass/linux/proton-pass_1.27.0_amd64.deb
         # The upstream publishes sha512sum
-        sha512: a821b0f644e83fc4b53de8ef37916befb44bb29abe697b0a0a71d539af9eb14b386dd3b789e49957b887a7fa3bba8dc7eeebfe0a4d53cfd6de7e839527fec629
+        sha512: 8fad59e82621e18ba6090b280ab4eb2c1a718f8157785c0b4cf38cb80cfb4daf524e236fd7171a6cdaaf75befb924deb836bdf681312cc31ff9421b46387b78c
         x-checker-data:
           type: json
           # https://github.com/ProtonMail/WebClients/blob/d1a23fc2c4ab1e1632118baaee6f2531022ae4cf/applications/pass-desktop/tools/deploy.sh#L127
