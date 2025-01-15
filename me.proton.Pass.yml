@@ -18,7 +18,18 @@ finish-args:
   - --env=ELECTRON_OZONE_PLATFORM_HINT=auto
   - --env=XCURSOR_PATH=~/.icons:/app/share/icons:/icons:/run/host/user-share/icons:/run/host/share/icons
 modules:
-    # fix auto logout
+  - name: dbus-run-session
+    buildsystem: cmake
+    cleanup: ["*"]
+    sources:
+      - type: archive
+        url: https://gitlab.freedesktop.org/dbus/dbus/-/archive/dbus-1.16.0/dbus-dbus-1.16.0.tar.gz
+        sha256: d2ca9d958c830e762ba70aea8e6b5c29fa7b58d0fee8ddd9bb5a00f35106ab57
+        x-checker-data:
+          type: anitya
+          project-id: 5356
+          url-template: https://gitlab.freedesktop.org/dbus/dbus/-/archive/dbus-$version/dbus-dbus-$version.tar.gz
+  # fix auto logout
   # https://github.com/flathub/org.signal.Signal/pull/756/commits/2caf105b18f906e7707f67b3cf7384a21f461564
   - name: libsecret
     buildsystem: meson
