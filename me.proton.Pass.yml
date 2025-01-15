@@ -18,7 +18,18 @@ finish-args:
   - --env=ELECTRON_OZONE_PLATFORM_HINT=auto
   - --env=XCURSOR_PATH=~/.icons:/app/share/icons:/icons:/run/host/user-share/icons:/run/host/share/icons
 modules:
-    # fix auto logout
+  - name: dbus-run-session
+    buildsystem: cmake
+    cleanup: ["*"]
+    sources:
+      - type: archive
+        url: https://gitlab.freedesktop.org/dbus/dbus/-/archive/dbus-1.16.0/dbus-dbus-1.16.0.tar.gz
+        sha256: d2ca9d958c830e762ba70aea8e6b5c29fa7b58d0fee8ddd9bb5a00f35106ab57
+        x-checker-data:
+          type: anitya
+          project-id: 5356
+          url-template: https://gitlab.freedesktop.org/dbus/dbus/-/archive/dbus-$version/dbus-dbus-$version.tar.gz
+  # fix auto logout
   # https://github.com/flathub/org.signal.Signal/pull/756/commits/2caf105b18f906e7707f67b3cf7384a21f461564
   - name: libsecret
     buildsystem: meson
@@ -36,8 +47,8 @@ modules:
       - /share/man
     sources:
       - type: archive
-        url: https://download.gnome.org/sources/libsecret/0.21/libsecret-0.21.4.tar.xz
-        sha256: 163d08d783be6d4ab9a979ceb5a4fecbc1d9660d3c34168c581301cd53912b20
+        url: https://download.gnome.org/sources/libsecret/0.21/libsecret-0.21.5.tar.xz
+        sha256: 08f45c44760ab4c2d6febd6e0eeb421663b29a72be52c48c61c507b0ef6a7920
         x-checker-data:
           type: gnome
           name: libsecret
