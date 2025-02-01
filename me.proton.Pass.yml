@@ -102,7 +102,7 @@ modules:
       - type: script
         dest-filename: start-proton-pass.sh
         commands:
-          - exec zypak-wrapper "/app/proton-pass/Proton Pass" "$@"
+          - env TMPDIR="$XDG_RUNTIME_DIR/app/${FLATPAK_ID:-me.proton.Pass}" zypak-wrapper "/app/proton-pass/Proton Pass" "$@"
 
       - type: file
         path: me.proton.Pass.metainfo.xml
