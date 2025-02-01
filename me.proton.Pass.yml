@@ -19,7 +19,7 @@ finish-args:
   - --env=XCURSOR_PATH=~/.icons:/app/share/icons:/icons:/run/host/user-share/icons:/run/host/share/icons
 modules:
   - name: dbus-run-session
-    buildsystem: cmake
+    buildsystem: cmake-ninja
     cleanup: ['*']
     sources:
       - type: archive
