@@ -83,9 +83,9 @@ modules:
       - type: file
         dest-filename: ProtonPass.deb
         only-arches: [x86_64]
-        url: https://proton.me/download/pass/linux/proton-pass_1.29.0_amd64.deb
+        url: https://proton.me/download/pass/linux/proton-pass_1.29.1_amd64.deb
         # The upstream publishes sha512sum
-        sha512: 99952e8e32c058b796d20920604a835007c2651d112fcf32ed923a22e31cb02e66f3ba0ce737ba053ef7c0746d8d893e11b4dd716b5ec225373f1d238564095b
+        sha512: e0469e5cceed54d33b085814d4ff80a0b9f8f72c2a518acbb63932481c103a2a23a1a28c5a4c639d0a5dd006856f83fc3b1b7334c53fbd406e76d9dc5e3f7cb0
         x-checker-data:
           type: json
           # https://github.com/ProtonMail/WebClients/blob/d1a23fc2c4ab1e1632118baaee6f2531022ae4cf/applications/pass-desktop/tools/deploy.sh#L127
@@ -102,7 +102,8 @@ modules:
       - type: script
         dest-filename: start-proton-pass.sh
         commands:
-          - env TMPDIR="$XDG_RUNTIME_DIR/app/${FLATPAK_ID:-me.proton.Pass}" zypak-wrapper "/app/proton-pass/Proton Pass" "$@"
+          - env TMPDIR="$XDG_RUNTIME_DIR/app/${FLATPAK_ID:-me.proton.Pass}" zypak-wrapper
+            "/app/proton-pass/Proton Pass" "$@"
 
       - type: file
         path: me.proton.Pass.metainfo.xml
