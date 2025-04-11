@@ -8,14 +8,15 @@ command: start-proton-pass
 finish-args:
   - --share=ipc
   - --share=network
-  - --socket=wayland
-  - --socket=fallback-x11
+  # - --socket=wayland
+  - --socket=x11
   - --device=all
   # DBus-based libsecret
   - --talk-name=org.freedesktop.secrets
   # Tray icon
   - --talk-name=org.kde.StatusNotifierWatcher
-  - --env=ELECTRON_OZONE_PLATFORM_HINT=auto
+  # Temporarily disable Wayland to work around a copy & paste bug: https://github.com/flathub/me.proton.Pass/issues/37
+  - --env=ELECTRON_OZONE_PLATFORM_HINT=x11
   - --env=XCURSOR_PATH=~/.icons:/app/share/icons:/icons:/run/host/user-share/icons:/run/host/share/icons
 modules:
   - name: dbus-run-session
