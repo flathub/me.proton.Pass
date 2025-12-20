@@ -128,7 +128,8 @@
     <screenshots>
         <screenshot type="default" xml:lang="en">
             <image>
-                https://res.cloudinary.com/dbulfrlrz/images/w_1024,h_658,c_scale/f_auto,q_auto/v1707558912/wp-pme/proton-pass-web-app-overview/proton-pass-web-app-overview.png</image>
+                https://pmecdn.protonweb.com/image-transformation/?s=s&amp;image=cta_keep_your_passwords_safe_for_free_4f90956465.png</image>
+            <caption xml:lang="en">The interface showcases user-friendly access to your Netflix credentials, complete with OTP generation for added security.</caption>
         </screenshot>
     </screenshots>
 
