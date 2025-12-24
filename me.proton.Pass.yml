@@ -9,7 +9,7 @@ finish-args:
   - --share=ipc
   - --share=network
   - --socket=wayland
-  - --socket=fallback-x11
+  - --socket=x11
   - --device=all
   # DBus-based libsecret
   - --talk-name=org.freedesktop.secrets
@@ -72,6 +72,7 @@ modules:
       - install -Dm644 usr/share/applications/proton-pass.desktop "${FLATPAK_DEST}/share/applications/${FLATPAK_ID}.desktop"
       - desktop-file-edit --set-key=Exec --set-value='start-proton-pass %U' --set-icon=${FLATPAK_ID}
         "${FLATPAK_DEST}/share/applications/${FLATPAK_ID}.desktop"
+      - echo "X-Flatpak=${FLATPAK_ID}" >> "${FLATPAK_DEST}/share/applications/${FLATPAK_ID}.desktop"
       # Fix icon image
       - patch-desktop-filename "${FLATPAK_DEST}/proton-pass/resources/app.asar"
 
