@@ -101,15 +101,8 @@ modules:
       - type: script
         dest-filename: start-proton-pass.sh
         commands:
-           - |
-              # Force X11 backend on GNOME Wayland for clipboard compatibility
-              # See: https://github.com/flathub/me.proton.Pass/issues/37
-              EXTRA_ARGS=()
-              if [ "$XDG_SESSION_TYPE" = "wayland" ] && echo "$XDG_CURRENT_DESKTOP" | grep -qi "GNOME"; then
-                  EXTRA_ARGS+=("--ozone-platform=x11")
-                  export DISPLAY=:0
-              fi
-              env TMPDIR="$XDG_RUNTIME_DIR/app/${FLATPAK_ID:-me.proton.Pass}" zypak-wrapper "/app/proton-pass/Proton Pass" "${EXTRA_ARGS[@]}" "$@"
+          - env TMPDIR="$XDG_RUNTIME_DIR/app/${FLATPAK_ID:-me.proton.Pass}" zypak-wrapper
+            "/app/proton-pass/Proton Pass" "$@"
 
       - type: file
         path: me.proton.Pass.metainfo.xml
