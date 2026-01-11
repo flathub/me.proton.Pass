@@ -14,10 +14,8 @@
     <project_group>Proton</project_group>
 
     <description>
-        <p>
-            NOTE: This a wrapper of the official packages, but it is not verified,
-            affiliated with, or supported by Proton AG.
-        </p>
+        <p>**NOTE: This a wrapper of the official packages, but it is not verified, affiliated with, 
+            or supported by Proton AG.**</p>
 
         <p>Get the password manager created by the scientists who met at CERN behind Proton Mail,
             the
