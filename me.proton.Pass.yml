@@ -89,8 +89,8 @@ modules:
           type: json
           # https://github.com/ProtonMail/WebClients/blob/d1a23fc2c4ab1e1632118baaee6f2531022ae4cf/applications/pass-desktop/tools/deploy.sh#L127
           url: https://proton.me/download/PassDesktop/linux/x64/version.json
-          version-query: .Releases[0].Version
-          url-query: .Releases[0].File[0].Url
+          version-query: .Releases | map(select(.CategoryName == "Stable")) | .[0].Version
+          url-query: .Releases | map(select(.CategoryName == "Stable")) | .[0].File[0].Url
           is-main-source: true
 
       - type: file
