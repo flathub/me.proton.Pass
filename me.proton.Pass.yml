@@ -1,6 +1,6 @@
 app-id: me.proton.Pass
 runtime: org.freedesktop.Platform
-runtime-version: &runtime-version '24.08'
+runtime-version: &runtime-version '25.08'
 sdk: org.freedesktop.Sdk
 base: org.electronjs.Electron2.BaseApp
 base-version: *runtime-version
@@ -73,7 +73,7 @@ modules:
       - desktop-file-edit --set-key=Exec --set-value='start-proton-pass %U' --set-icon=${FLATPAK_ID}
         "${FLATPAK_DEST}/share/applications/${FLATPAK_ID}.desktop"
       # Fix icon image
-      - patch-desktop-filename "${FLATPAK_DEST}/proton-pass/resources/app.asar"
+      - patch-electron-desktop-filename "${FLATPAK_DEST}/proton-pass/resources/app.asar"
 
       # Install the wrapper script to start it.
       - install -Dm 755 start-proton-pass.sh /app/bin/start-proton-pass
