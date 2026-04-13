@@ -1,0 +1,24 @@
+--- a/.yarnrc.yml
++++ b/.yarnrc.yml
+@@ -4,21 +4,7 @@
+ 
+ nodeLinker: node-modules
+ 
+-plugins:
+-    - path: .yarn/plugin-postinstall.js
+-
+ yarnPath: .yarn/releases/yarn-4.12.0.cjs
+-
+-npmPublishRegistry: https://nexus.protontech.ch/repository/web-npm/
+-
+-npmScopes:
+-    tpe:
+-        npmRegistryServer: 'https://gitlab.protontech.ch/api/v4/projects/4357/packages/npm/'
+-        npmAuthToken: '${CI_JOB_TOKEN:-}'
+-    proton-meet:
+-        npmRegistryServer: 'https://nexus.protontech.ch/repository/meet-npm/'
+-    proton: 
+-        npmRegistryServer: 'https://nexus.protontech.ch/repository/foundation-npm/'
+ 
+ npmAuditIgnoreAdvisories:
+     # Ignore advisories for xlsx package. This package is depended on by a third-party library rowsncolumns (docs)

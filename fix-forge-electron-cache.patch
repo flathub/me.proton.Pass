@@ -1,0 +1,13 @@
+--- a/applications/pass-desktop/forge.config.ts
++++ b/applications/pass-desktop/forge.config.ts
+@@ -34,6 +34,10 @@
+                       teamId: process.env.PASS_DESKTOP_APPLE_TEAM_ID!,
+                   }
+                 : undefined,
++        // Point @electron/packager at the pre-fetched Electron zip directory
++        // so it never needs to reach github.com during the Flatpak build.
++        // The env var is only set in the Flatpak sandbox; normal builds are unaffected.
++        ...(process.env.FLATPAK_ELECTRON_ZIP_DIR ? { electronZipDir: process.env.FLATPAK_ELECTRON_ZIP_DIR } : {}),
+     },
+     rebuildConfig: {},
+     makers: [
