@@ -137,6 +137,20 @@ modules:
           fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
         "
 
+      # Strip @rowsncolumns/* workspace: dependencies from docs-editor.
+      # These are private/external packages (not in the monorepo) referenced
+      # with workspace:^ — Yarn Berry fails with "Workspace not found" when it
+      # encounters them, even though docs-editor is not an active workspace.
+      # Fix suggested by D-Bao (Proton) in flathub/me.proton.Pass#99.
+      - |
+        node -e "
+          const fs = require('fs');
+          const pkg = JSON.parse(fs.readFileSync('applications/docs-editor/package.json', 'utf8'));
+          pkg.dependencies = Object.fromEntries(
+            Object.entries(pkg.dependencies || {}).filter(([k]) => !k.startsWith('@rowsncolumns/')));
+          fs.writeFileSync('applications/docs-editor/package.json', JSON.stringify(pkg, null, 2) + '\n');
+        "
+
       # ---- JavaScript / TypeScript dependencies --------------------------
       # Set up the SDK Node.js headers for node-gyp / napi-rs (symlinks the
       # SDK include/ dir into the node-gyp cache expected by native builds).
