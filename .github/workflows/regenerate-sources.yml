@@ -1,0 +1,165 @@
+name: Regenerate sources
+
+# Trigger manually: when the external-data-checker opens a version-bump PR,
+# go to Actions → "Regenerate sources" → Run workflow, enter the PR branch
+# name, and this job will regenerate generated-sources.json and
+# cargo-sources.json (and patch the manifest if the Electron version changed),
+# then commit the result back to the PR branch so it is ready to review and
+# merge.
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "PR branch to update (e.g. update-proton-pass-1.37.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install generator dependencies
+        run: pip install aiohttp toml
+
+      - name: Clone flatpak-builder-tools
+        run: git clone --depth=1 https://github.com/flatpak/flatpak-builder-tools.git _tools
+
+      # Read the tag that the external-data-checker wrote into the manifest
+      # so we can check out exactly the right upstream commit.
+      - name: Read upstream tag from manifest
+        id: upstream
+        run: |
+          TAG=$(python3 - << 'EOF'
+          import re, sys
+          text = open('me.proton.Pass.yml').read()
+          m = re.search(r'tag:\s*"(proton-pass@[\d.]+)"', text)
+          if m is None:
+              sys.exit('ERROR: could not find proton-pass tag in manifest')
+          print(m.group(1))
+          EOF
+          )
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Upstream tag: $TAG"
+
+      # Only fetch the two lock files — no need to download the full monorepo.
+      - name: Sparse-checkout WebClients at new tag
+        run: |
+          git clone \
+            --filter=blob:none \
+            --sparse \
+            --depth=1 \
+            --branch "${{ steps.upstream.outputs.tag }}" \
+            https://github.com/ProtonMail/WebClients.git \
+            _webclient
+          git -C _webclient sparse-checkout set \
+            yarn.lock \
+            applications/pass-desktop/native/Cargo.lock
+
+      - name: Regenerate generated-sources.json
+        run: |
+          python3 _tools/node/flatpak-node-generator.py \
+            --electron-node-headers \
+            yarn _webclient/yarn.lock \
+            -o generated-sources.json
+
+      # Playwright browser binaries are only needed for end-to-end tests,
+      # not at Flatpak build time — strip them to keep the file lean.
+      - name: Strip Playwright entries from generated-sources.json
+        run: |
+          python3 - << 'EOF'
+          import json
+          data = json.load(open('generated-sources.json'))
+          data = [e for e in data if not (
+              e.get('type') == 'archive' and 'cdn.playwright.dev' in e.get('url', '')
+              or e.get('type') == 'inline' and 'ms-playwright' in e.get('dest', '')
+          )]
+          with open('generated-sources.json', 'w') as f:
+              json.dump(data, f, indent=4)
+              f.write('\n')
+          EOF
+
+      - name: Regenerate cargo-sources.json
+        run: |
+          python3 _tools/cargo/flatpak-cargo-generator.py \
+            _webclient/applications/pass-desktop/native/Cargo.lock \
+            -o cargo-sources.json
+
+      # The manifest hardcodes the Electron version in three places:
+      #   EHASH   – sha256 of the @electron/get download URL (cache-key dir)
+      #   EZIP    – zip filenames for x64 and arm64
+      #   SHASUMS – SHASUMS256.txt filename suffix
+      # Detect the version from the freshly generated sources and patch all
+      # four occurrences only when the version has actually changed.
+      - name: Update hardcoded Electron version in manifest
+        run: |
+          NEW_VER=$(python3 - << 'EOF'
+          import json, re
+          data = json.load(open('generated-sources.json'))
+          for e in data:
+              m = re.search(
+                  r'electron/releases/download/v([\d.]+)/electron-v[\d.]+-linux-x64\.zip',
+                  e.get('url', '')
+              )
+              if m:
+                  print(m.group(1))
+                  break
+          EOF
+          )
+          echo "Detected Electron version: $NEW_VER"
+
+          if [ -z "$NEW_VER" ]; then
+            echo "ERROR: could not detect Electron version from generated-sources.json" >&2
+            exit 1
+          fi
+
+          OLD_VER=$(grep -oP 'EZIP="electron-v\K[\d.]+(?=-linux)' me.proton.Pass.yml | head -1)
+          echo "Current Electron version: $OLD_VER"
+
+          if [ "$NEW_VER" = "$OLD_VER" ]; then
+            echo "Electron version unchanged, skipping manifest update"
+            exit 0
+          fi
+
+          echo "Electron version changed: $OLD_VER → $NEW_VER"
+
+          NEW_HASH=$(printf '%s' \
+            "https://github.com/electron/electron/releases/download/v${NEW_VER}" \
+            | sha256sum | awk '{print $1}')
+          echo "New EHASH: $NEW_HASH"
+
+          OLD_HASH=$(grep -oP 'EHASH=\K[0-9a-f]{64}' me.proton.Pass.yml)
+
+          sed -i \
+            -e "s/electron-v${OLD_VER}/electron-v${NEW_VER}/g" \
+            -e "s/SHASUMS256\.txt-${OLD_VER}/SHASUMS256.txt-${NEW_VER}/g" \
+            -e "s|/releases/download/v${OLD_VER}\"|/releases/download/v${NEW_VER}\"|" \
+            -e "s/${OLD_HASH}/${NEW_HASH}/" \
+            me.proton.Pass.yml
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add generated-sources.json cargo-sources.json me.proton.Pass.yml
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: regenerate sources for ${{ steps.upstream.outputs.tag }}"
+            git push
+          fi
