@@ -58,25 +58,30 @@ modules:
   - name: proton-pass
     buildsystem: simple
     # -----------------------------------------------------------------------
-    # PREREQUISITES — before this module can build, two files must be
-    # generated locally and committed to this repository:
+    # MAINTENANCE — two generated files must be re-committed whenever the
+    # upstream source tag is bumped:
     #
     # 1. generated-sources.json  (JS/Node packages + Electron binary)
-    #    Clone the repo at the target tag, then run:
+    #    Re-run when yarn.lock changes:
     #      flatpak-node-generator --electron-node-headers \
     #        yarn WebClients/yarn.lock \
     #        -o generated-sources.json
+    #    Then strip Playwright browser binaries (not needed at build time):
+    #      python3 -c "
+    #        import json, sys
+    #        data = json.load(open('generated-sources.json'))
+    #        data = [e for e in data if not (
+    #          e.get('type') == 'archive' and 'cdn.playwright.dev' in e.get('url','')
+    #          or e.get('type') == 'inline' and 'ms-playwright' in e.get('dest',''))]
+    #        json.dump(data, sys.stdout, indent=4); print()
+    #      " > generated-sources.json.tmp && mv generated-sources.json.tmp generated-sources.json
     #
     # 2. cargo-sources.json  (Rust crates for the native NAPI addon and host)
-    #    Download flatpak-cargo-generator.py from
-    #    https://github.com/flatpak/flatpak-builder-tools/tree/master/cargo
-    #    then run:
+    #    Re-run when applications/pass-desktop/native/Cargo.lock changes:
     #      python3 flatpak-cargo-generator.py \
     #        WebClients/applications/pass-desktop/native/Cargo.lock \
     #        -o cargo-sources.json
-    #
-    # Both files are currently empty stubs ([]). The build will fail at the
-    # yarn install / cargo build steps until they are populated.
+    #    (flatpak-cargo-generator.py is in flatpak-builder-tools/cargo/)
     # -----------------------------------------------------------------------
     build-options:
       append-path: /usr/lib/sdk/node22/bin:/usr/lib/sdk/rust-stable/bin
@@ -166,8 +171,10 @@ modules:
       - yarn convertToZip $(which yarn)
 
       # Install all packages from the converted offline cache.
-      # We omit --immutable because stripping unneeded workspaces from
-      # package.json causes yarn to prune the lockfile, which --immutable
+      # --mode=skip-build suppresses postinstall scripts (native addons are
+      # compiled separately in the Rust step below).
+      # --immutable is intentionally omitted: pruning unneeded workspaces from
+      # package.json causes Yarn to update the lockfile, which --immutable
       # would reject. YARN_ENABLE_NETWORK=0 ensures no network access occurs.
       - yarn install --mode=skip-build
 
@@ -264,19 +271,12 @@ modules:
           tag-pattern: '^proton-pass@([\d]+\.[\d]+\.[\d]+)$'
           version-scheme: semantic
 
-      # Pre-fetched npm/yarn packages + Electron 39 binary.
-      # Generate with (run once, re-run when yarn.lock changes):
-      #   flatpak-node-generator --electron-node-headers \
-      #     yarn WebClients/yarn.lock -o generated-sources.json
-      # Currently a stub — build will fail at `yarn install` until populated.
+      # Pre-fetched npm/yarn packages + Electron binary.
+      # Re-generate when yarn.lock changes (see MAINTENANCE comment above).
       - generated-sources.json
 
       # Pre-fetched Rust crates for applications/pass-desktop/native/.
-      # Generate with (run once, re-run when native/Cargo.lock changes):
-      #   python3 flatpak-cargo-generator.py \
-      #     WebClients/applications/pass-desktop/native/Cargo.lock \
-      #     -o cargo-sources.json
-      # Currently a stub — build will fail at `yarn run build:native` until populated.
+      # Re-generate when native/Cargo.lock changes (see MAINTENANCE comment above).
       - cargo-sources.json
 
       # Removes private Proton npm registry config unreachable from the sandbox
@@ -288,9 +288,9 @@ modules:
       - type: patch
         path: fix-native-build.patch
 
-      # Adds packagerConfig.download.cacheRoot so @electron/packager passes
-      # FLATPAK_ELECTRON_CACHE explicitly to @electron/get, bypassing any
-      # uncertainty about XDG_CACHE_HOME propagation through env-paths.
+      # Adds packagerConfig.electronZipDir from FLATPAK_ELECTRON_ZIP_DIR so
+      # @electron/packager resolves the pre-fetched Electron zip directly from
+      # the flatpak-node cache directory without any network fetch.
       - type: patch
         path: fix-forge-electron-cache.patch
 
