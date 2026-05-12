@@ -127,6 +127,18 @@
         </screenshot>
     </screenshots>
 
+    <branding>
+        <!-- Proton Pass purple, sourced from applications/pass-desktop/assets/logo.svg -->
+        <color type="primary" scheme_preference="light">#6D4AFF</color>
+        <color type="primary" scheme_preference="dark">#8B6BFF</color>
+    </branding>
+
+    <requires>
+        <control>keyboard</control>
+        <control>pointing</control>
+        <display_length compare="ge">768</display_length>
+    </requires>
+
     <content_rating type="oars-1.1">
         <content_attribute id="money-purchasing">intense</content_attribute>
     </content_rating>
