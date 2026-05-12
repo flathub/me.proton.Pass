@@ -86,11 +86,15 @@ trap 'echo "==> Cleaning up $TMPDIR"; rm -rf "$TMPDIR"' EXIT
 
 echo ""
 echo "==> Sparse-cloning ProtonMail/WebClients at tag '$TAG'..."
-echo "    (shallow + sparse — only yarn.lock and Cargo.lock are fetched)"
+echo "    (partial clone — only commit/tree objects are fetched initially;"
+echo "     blobs for yarn.lock and Cargo.lock are fetched on checkout)"
+# Note: --depth=1 is intentionally omitted.  Combining a shallow clone
+# (--depth=1) with a partial clone (--filter=blob:none) can fail with
+# exit code 128 on GitHub's git server.  The filter alone keeps the
+# download lean; only commit/tree metadata is fetched up-front.
 git clone \
     --filter=blob:none \
     --sparse \
-    --depth=1 \
     --branch "$TAG" \
     https://github.com/ProtonMail/WebClients.git \
     "$TMPDIR/WebClients"

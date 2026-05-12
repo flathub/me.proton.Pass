@@ -40,6 +40,12 @@ jobs:
           # Push trigger:            github.ref  = the pushed branch
           # workflow_dispatch:       inputs.branch if set, else github.ref
           ref: ${{ inputs.branch || github.ref }}
+          # fetch-depth: 2 so that HEAD~1 is available for the tag-change
+          # check below.  (Default depth=1 would leave HEAD~1 missing and
+          # cause the check to always fall through to needed=true.)
+          # For a workflow_dispatch the check short-circuits before reading
+          # HEAD~1, so depth=2 is harmless there.
+          fetch-depth: 2
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -69,13 +75,51 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "Upstream tag: $TAG"
 
+      # For push triggers: skip the heavy regeneration when the upstream tag
+      # is identical to HEAD~1 (e.g. a commit that only changed finish-args
+      # or the launcher script).  workflow_dispatch always regenerates.
+      - name: Check whether regeneration is needed
+        id: need-regen
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "Manual dispatch – always regenerate"
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          PREV_TAG=$(git show HEAD~1:me.proton.Pass.yml 2>/dev/null \
+            | python3 -c "
+import re, sys
+m = re.search(r'tag:\\s*\"(proton-pass@[\\d.]+)\"', sys.stdin.read())
+print(m.group(1) if m else '')
+" 2>/dev/null || echo "")
+
+          echo "Previous tag: ${PREV_TAG:-<none>}"
+          echo "Current tag:  ${{ steps.upstream.outputs.tag }}"
+
+          if [ -n "$PREV_TAG" ] && \
+             [ "$PREV_TAG" = "${{ steps.upstream.outputs.tag }}" ]; then
+            echo "Tag unchanged – skipping regeneration"
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Tag changed – regeneration needed"
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          fi
+
       # Only fetch the two lock files — no need to clone the full monorepo.
+      #
+      # Note: --depth=1 is intentionally omitted.  Combining it with
+      # --filter=blob:none creates a "partial shallow clone" that GitHub's
+      # Gitaly server occasionally rejects with exit code 128.  The partial
+      # clone filter alone already makes the fetch very lean: only commit/
+      # tree objects are transferred; blobs are fetched on-demand when the
+      # sparse-checkout materialises the two files below.
       - name: Sparse-checkout WebClients at new tag
+        if: steps.need-regen.outputs.needed == 'true'
         run: |
           git clone \
             --filter=blob:none \
             --sparse \
-            --depth=1 \
             --branch "${{ steps.upstream.outputs.tag }}" \
             https://github.com/ProtonMail/WebClients.git \
             _webclient
@@ -84,12 +128,14 @@ jobs:
             applications/pass-desktop/native/Cargo.lock
 
       - name: Strip private-registry stanzas from yarn.lock
+        if: steps.need-regen.outputs.needed == 'true'
         run: |
           python3 strip-private-registry-stanzas.py \
             _webclient/yarn.lock \
             _webclient/yarn-public.lock
 
       - name: Regenerate generated-sources.json
+        if: steps.need-regen.outputs.needed == 'true'
         run: |
           python3 _tools/node/flatpak-node-generator.py \
             --electron-node-headers \
@@ -99,6 +145,7 @@ jobs:
       # Playwright browser binaries are only needed for end-to-end tests,
       # not at Flatpak build time — strip them to keep the file lean.
       - name: Strip Playwright entries from generated-sources.json
+        if: steps.need-regen.outputs.needed == 'true'
         run: |
           python3 - << 'EOF'
           import json
@@ -113,6 +160,7 @@ jobs:
           EOF
 
       - name: Regenerate cargo-sources.json
+        if: steps.need-regen.outputs.needed == 'true'
         run: |
           python3 _tools/cargo/flatpak-cargo-generator.py \
             _webclient/applications/pass-desktop/native/Cargo.lock \
@@ -125,6 +173,7 @@ jobs:
       # Detect the version from the freshly generated sources and patch all
       # occurrences only when the version has actually changed.
       - name: Update hardcoded Electron version in manifest
+        if: steps.need-regen.outputs.needed == 'true'
         run: |
           NEW_VER=$(python3 - << 'EOF'
           import json, re
@@ -171,6 +220,7 @@ jobs:
             me.proton.Pass.yml
 
       - name: Commit and push
+        if: steps.need-regen.outputs.needed == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
