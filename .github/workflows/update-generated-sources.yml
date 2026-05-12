@@ -1,19 +1,29 @@
-name: Regenerate sources
+name: Update generated sources
 
-# Trigger manually: when the external-data-checker opens a version-bump PR,
-# go to Actions → "Regenerate sources" → Run workflow, enter the PR branch
-# name, and this job will regenerate generated-sources.json and
-# cargo-sources.json (and patch the manifest if the Electron version changed),
-# then commit the result back to the PR branch so it is ready to review and
-# merge.
+# Fires automatically when a branch (other than master) that touches
+# me.proton.Pass.yml is pushed — most commonly when Flathub's
+# external-data-checker opens a version-bump PR.  The workflow
+# regenerates generated-sources.json and cargo-sources.json (and patches
+# the manifest if the Electron version changed), then commits the result
+# back to the same branch so the PR is complete and ready to review.
+#
+# A workflow_dispatch trigger is also provided as a manual fallback,
+# e.g. to re-run after a flatpak-node-generator update or to target a
+# specific branch by name.
 
 on:
+  push:
+    branches-ignore:
+      - master
+    paths:
+      - me.proton.Pass.yml
+
   workflow_dispatch:
     inputs:
       branch:
-        description: "PR branch to update (e.g. update-proton-pass-1.37.0)"
-        required: true
-        type: string
+        description: "Branch to update (blank = branch that triggered the dispatch)"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -24,10 +34,12 @@ jobs:
     timeout-minutes: 60
 
     steps:
-      - name: Check out PR branch
+      - name: Check out branch
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.branch }}
+          # Push trigger:            github.ref  = the pushed branch
+          # workflow_dispatch:       inputs.branch if set, else github.ref
+          ref: ${{ inputs.branch || github.ref }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -57,7 +69,7 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "Upstream tag: $TAG"
 
-      # Only fetch the two lock files — no need to download the full monorepo.
+      # Only fetch the two lock files — no need to clone the full monorepo.
       - name: Sparse-checkout WebClients at new tag
         run: |
           git clone \
@@ -107,11 +119,11 @@ jobs:
             -o cargo-sources.json
 
       # The manifest hardcodes the Electron version in three places:
-      #   EHASH   – sha256 of the @electron/get download URL (cache-key dir)
-      #   EZIP    – zip filenames for x64 and arm64
-      #   SHASUMS – SHASUMS256.txt filename suffix
+      #   EHASH   — sha256 of the @electron/get download URL (cache-key dir)
+      #   EZIP    — zip filenames for x64 and arm64
+      #   SHASUMS — SHASUMS256.txt filename suffix
       # Detect the version from the freshly generated sources and patch all
-      # four occurrences only when the version has actually changed.
+      # occurrences only when the version has actually changed.
       - name: Update hardcoded Electron version in manifest
         run: |
           NEW_VER=$(python3 - << 'EOF'
