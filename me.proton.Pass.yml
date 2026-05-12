@@ -64,33 +64,32 @@ modules:
     # MAINTENANCE — two generated files must be re-committed whenever the
     # upstream source tag is bumped:
     #
-    # 1. generated-sources.json  (JS/Node packages + Electron binary)
-    #    Re-run when yarn.lock changes:
-    #      flatpak-node-generator --electron-node-headers \
-    #        yarn WebClients/yarn.lock \
-    #        -o generated-sources.json
-    #    Then strip Playwright browser binaries (not needed at build time):
-    #      python3 -c "
-    #        import json, sys
-    #        data = json.load(open('generated-sources.json'))
-    #        data = [e for e in data if not (
-    #          e.get('type') == 'archive' and 'cdn.playwright.dev' in e.get('url','')
-    #          or e.get('type') == 'inline' and 'ms-playwright' in e.get('dest',''))]
-    #        json.dump(data, sys.stdout, indent=4); print()
-    #      " > generated-sources.json.tmp && mv generated-sources.json.tmp generated-sources.json
+    #   generated-sources.json  (JS/Node packages + Electron binary)
+    #   cargo-sources.json      (Rust crates for the native NAPI addon)
     #
-    # 2. cargo-sources.json  (Rust crates for the native NAPI addon and host)
-    #    Re-run when applications/pass-desktop/native/Cargo.lock changes:
-    #      python3 flatpak-cargo-generator.py \
-    #        WebClients/applications/pass-desktop/native/Cargo.lock \
-    #        -o cargo-sources.json
-    #    (flatpak-cargo-generator.py is in flatpak-builder-tools/cargo/)
+    # Regenerate both in one step with the helper script:
+    #
+    #   ./update-generated-sources.sh
+    #
+    # See that script's header for prerequisites and usage.
     # -----------------------------------------------------------------------
     build-options:
       append-path: /usr/lib/sdk/node22/bin:/usr/lib/sdk/rust-stable/bin
       env:
         # Give build tools a writable home inside the build tree
         HOME: /run/build/proton-pass
+        # Make is-ci return true, which short-circuits the root postinstall
+        # script ('is-ci || husky; yarn run config-app') without running the
+        # git-hook installer or config fetcher.
+        CI: "true"
+        # Prevents @sentry/cli's postinstall from downloading a pre-built
+        # binary over the network (not needed for the Flatpak build).
+        SENTRY_CLI_SKIP_DOWNLOAD: "1"
+        # CI=1 causes Yarn 4 to automatically enable --immutable, which rejects
+        # any install that would update the lockfile.  Our workspace filter
+        # modifies package.json (changing the dep graph), so the lockfile WILL
+        # differ — that is expected and intentional.  Explicitly disable it.
+        YARN_ENABLE_IMMUTABLE_INSTALLS: "0"
         # Rust toolchain provided by the SDK extension
         RUSTUP_HOME: /usr/lib/sdk/rust-stable
         CARGO_HOME: /run/build/proton-pass/cargo
@@ -117,6 +116,28 @@ modules:
         # Production build — disables dev-only webpack paths
         NODE_ENV: production
     build-commands:
+      # ---- Strip private Proton registry config from .yarnrc.yml ----------
+      # The upstream .yarnrc.yml redirects certain npm scopes to private Proton
+      # registry servers (nexus.protontech.ch, gitlab.protontech.ch) and loads
+      # a postinstall plugin.  Strip these keys dynamically with a Python
+      # regex so the config stays valid for offline builds regardless of
+      # upstream formatting changes.  Replaces the fragile static
+      # remove-private-registries.patch.
+      - |
+        python3 -c "
+        import re, pathlib
+        text = pathlib.Path('.yarnrc.yml').read_text()
+        for pat in [
+          r'^plugins:\n([ \t]+.*\n)*',
+          r'^npmPublishRegistry:.*\n(\n)?',
+          r'^npmScopes:\n([ \t]+.*\n)*',
+          r'^npmPreapprovedPackages:\n([ \t]+.*\n)*',
+          r'^npmMinimalAgeGate:.*\n',
+        ]:
+          text = re.sub(pat, '', text, flags=re.MULTILINE)
+        pathlib.Path('.yarnrc.yml').write_text(text)
+        "
+
       # ---- Restrict workspaces to pass-desktop only ---------------------
       # The monorepo contains many applications (meet, drive, lumo, mail,
       # calendar, wallet, …) that depend on packages from Proton's internal
@@ -145,18 +166,78 @@ modules:
           fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
         "
 
-      # Strip @rowsncolumns/* workspace: dependencies from docs-editor.
-      # These are private/external packages (not in the monorepo) referenced
-      # with workspace:^ — Yarn Berry fails with "Workspace not found" when it
-      # encounters them, even though docs-editor is not an active workspace.
-      # Fix suggested by D-Bao (Proton) in flathub/me.proton.Pass#99.
+      # Auto-discover and remove unresolvable dependencies across the entire
+      # monorepo.  Two categories break offline builds:
+      #
+      #  (A) Phantom workspace packages: declared as workspace:^ but absent
+      #      from the git tree (e.g. @rowsncolumns/* in docs-editor, which are
+      #      commercial external packages incorrectly referenced as workspace
+      #      deps).  Yarn Berry fails with "Workspace not found" for these.
+      #
+      #  (B) Private npm packages not in the offline cache (e.g. @proton-meet/*,
+      #      @tpe/*, @proton/proton-foundation-search).
+      #
+      # The script below auto-discovers both categories by comparing every
+      # dep against the set of package names actually present in the tree,
+      # and patches them out.  This replaces the former bespoke @rowsncolumns
+      # removal and will automatically catch future phantom deps without
+      # requiring a manifest update.
       - |
         node -e "
           const fs = require('fs');
-          const pkg = JSON.parse(fs.readFileSync('applications/docs-editor/package.json', 'utf8'));
-          pkg.dependencies = Object.fromEntries(
-            Object.entries(pkg.dependencies || {}).filter(([k]) => !k.startsWith('@rowsncolumns/')));
-          fs.writeFileSync('applications/docs-editor/package.json', JSON.stringify(pkg, null, 2) + '\n');
+          const path = require('path');
+          const glob = (dir, results=[]) => {
+            for (const f of fs.readdirSync(dir, {withFileTypes: true})) {
+              const full = path.join(dir, f.name);
+              if (f.isDirectory() && f.name !== 'node_modules' && f.name !== '.git') glob(full, results);
+              else if (f.name === 'package.json') results.push(full);
+            }
+            return results;
+          };
+          const cwd = process.cwd();
+          // Build the set of package names actually present in the repo tree.
+          const wsNames = new Set();
+          for (const p of glob(cwd)) {
+            try { const d = JSON.parse(fs.readFileSync(p,'utf8')); if (d.name) wsNames.add(d.name); } catch {}
+          }
+          // Private npm scopes unreachable from the offline sandbox.
+          const privateRe = /^(@proton-meet\/|@tpe\/)|^@proton\/proton-foundation-search\$/;
+          let totalRemoved = 0;
+          for (const p of glob(cwd)) {
+            try {
+              const pkg = JSON.parse(fs.readFileSync(p,'utf8'));
+              let changed = false;
+              for (const sec of ['dependencies','devDependencies','peerDependencies']) {
+                for (const dep of Object.keys(pkg[sec] || {})) {
+                  const ver = pkg[sec][dep];
+                  // Workspace protocol has two forms:
+                  //   Path-based: workspace:some/path  — Yarn resolves by path, not dep name.
+                  //     Phantom only if the target path does not exist in the repo.
+                  //   Name-based: workspace:^, workspace:*, workspace:~, workspace:1.x
+                  //     Phantom if the dep name is not the 'name' field of any package.json.
+                  let isPhantomWs = false;
+                  if (ver.startsWith('workspace:')) {
+                    const wsSpec = ver.slice('workspace:'.length);
+                    if (wsSpec.includes('/')) {
+                      isPhantomWs = !fs.existsSync(path.join(cwd, wsSpec));
+                    } else {
+                      isPhantomWs = !wsNames.has(dep);
+                    }
+                  }
+                  const isPrivateNpm = privateRe.test(dep);
+                  if (isPhantomWs || isPrivateNpm) {
+                    const rel = path.relative(cwd, p);
+                    console.log('Removing [' + (isPhantomWs?'phantom ws':'private npm') + '] ' + dep + ' from ' + rel);
+                    delete pkg[sec][dep];
+                    changed = true;
+                    totalRemoved++;
+                  }
+                }
+              }
+              if (changed) fs.writeFileSync(p, JSON.stringify(pkg, null, 2) + '\n');
+            } catch(e) { /* skip unreadable */ }
+          }
+          console.log('Done: removed ' + totalRemoved + ' unresolvable dep(s).');
         "
 
       # ---- JavaScript / TypeScript dependencies --------------------------
@@ -282,10 +363,6 @@ modules:
       # Pre-fetched Rust crates for applications/pass-desktop/native/.
       # Re-generate when native/Cargo.lock changes (see MAINTENANCE comment above).
       - cargo-sources.json
-
-      # Removes private Proton npm registry config unreachable from the sandbox
-      - type: patch
-        path: remove-private-registries.patch
 
       # Removes rustup target add calls and restricts Linux to the native arch
       # gnu target only (no musl needed inside a Flatpak glibc runtime)

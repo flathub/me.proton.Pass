@@ -71,11 +71,17 @@ jobs:
             yarn.lock \
             applications/pass-desktop/native/Cargo.lock
 
+      - name: Strip private-registry stanzas from yarn.lock
+        run: |
+          python3 strip-private-registry-stanzas.py \
+            _webclient/yarn.lock \
+            _webclient/yarn-public.lock
+
       - name: Regenerate generated-sources.json
         run: |
           python3 _tools/node/flatpak-node-generator.py \
             --electron-node-headers \
-            yarn _webclient/yarn.lock \
+            yarn _webclient/yarn-public.lock \
             -o generated-sources.json
 
       # Playwright browser binaries are only needed for end-to-end tests,
