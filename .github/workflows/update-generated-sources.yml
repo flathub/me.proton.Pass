@@ -25,6 +25,19 @@ on:
         required: false
         default: ""
 
+# Prevent two regeneration runs from racing on the same branch.
+# cancel-in-progress: true means a newer push supersedes an older in-
+# progress run (the older run's regenerated output is stale).
+#
+# Group key: push events set github.ref to "refs/heads/<branch>"; a
+# workflow_dispatch with inputs.branch set provides only the bare branch
+# name.  Normalise to refs/heads/<branch> in both cases so that a manual
+# dispatch targeting a branch shares the same concurrency slot as any
+# automated push-triggered run on that branch.
+concurrency:
+  group: regenerate-${{ inputs.branch != '' && format('refs/heads/{0}', inputs.branch) || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
