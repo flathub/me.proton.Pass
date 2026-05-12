@@ -8,8 +8,9 @@ command: start-proton-pass
 finish-args:
   - --share=ipc
   - --share=network
-  # workaround the copy issue: https://github.com/flathub/me.proton.Pass/issues/37
-  - --socket=x11
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --filesystem=xdg-run/Clipboard
   - --device=all
   # DBus-based libsecret
   - --talk-name=org.freedesktop.secrets
@@ -103,7 +104,7 @@ modules:
         # force x11 to workaround the copy issue: https://github.com/flathub/me.proton.Pass/issues/37
         commands:
           - env TMPDIR="$XDG_RUNTIME_DIR/app/${FLATPAK_ID:-me.proton.Pass}" zypak-wrapper
-            "/app/proton-pass/Proton Pass" --ozone-platform=x11 "$@"
+            "/app/proton-pass/Proton Pass" "$@"
 
       - type: file
         path: me.proton.Pass.metainfo.xml
