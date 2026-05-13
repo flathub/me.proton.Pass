@@ -15,3 +15,6 @@ WebClients/
 flatpak-builder-tools/
 upstream-pr/
 test-repo/
+# Created by the update-generated-sources workflow (local runs)
+_webclient/
+_tools/

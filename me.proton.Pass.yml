@@ -70,11 +70,31 @@ modules:
     #   generated-sources.json  (JS/Node packages + Electron binary)
     #   cargo-sources.json      (Rust crates for the native NAPI addon)
     #
-    # Regenerate both in one step with the helper script:
+    # In normal operation the update-generated-sources GitHub Actions workflow
+    # handles this automatically whenever Flathub's external-data-checker
+    # opens a version-bump PR.
     #
-    #   ./update-generated-sources.sh
+    # To regenerate manually (e.g. after a flatpak-node-generator update):
     #
-    # See that script's header for prerequisites and usage.
+    #   pip install aiohttp toml
+    #   git clone --depth=1 \
+    #     https://github.com/flatpak/flatpak-builder-tools.git _tools
+    #
+    #   # Sparse-checkout only the two lockfiles for the target tag:
+    #   git clone --filter=blob:none --sparse \
+    #     --branch proton-pass@<VERSION> \
+    #     https://github.com/ProtonMail/WebClients.git _webclient
+    #   git -C _webclient sparse-checkout set \
+    #     yarn.lock applications/pass-desktop/native/Cargo.lock
+    #
+    #   python3 strip-private-registry-stanzas.py \
+    #     _webclient/yarn.lock _webclient/yarn-public.lock
+    #   python3 _tools/node/flatpak-node-generator.py \
+    #     --electron-node-headers yarn _webclient/yarn-public.lock \
+    #     -o generated-sources.json
+    #   python3 _tools/cargo/flatpak-cargo-generator.py \
+    #     _webclient/applications/pass-desktop/native/Cargo.lock \
+    #     -o cargo-sources.json
     # -----------------------------------------------------------------------
     build-options:
       append-path: /usr/lib/sdk/node22/bin:/usr/lib/sdk/rust-stable/bin
@@ -352,8 +372,8 @@ modules:
       # the root yarn.lock covers all workspaces.
       - type: git
         url: https://github.com/ProtonMail/WebClients.git
-        tag: "proton-pass@1.36.0"
-        commit: e138546d26d87748a9a6d73492fbe0780475a0dd
+        tag: "proton-pass@1.36.1"
+        commit: 3b392281b3f0dd81b6967d5760ac46ff90850d89
         x-checker-data:
           type: git
           tag-pattern: '^proton-pass@([\d]+\.[\d]+\.[\d]+)$'

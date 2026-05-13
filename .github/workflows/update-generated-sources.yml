@@ -66,7 +66,7 @@ jobs:
           python-version: "3.x"
 
       - name: Install generator dependencies
-        run: pip install aiohttp toml
+        run: pip install aiohttp pyyaml tomlkit
 
       - name: Clone flatpak-builder-tools
         run: git clone --depth=1 https://github.com/flatpak/flatpak-builder-tools.git _tools
@@ -136,9 +136,9 @@ print(m.group(1) if m else '')
             --branch "${{ steps.upstream.outputs.tag }}" \
             https://github.com/ProtonMail/WebClients.git \
             _webclient
-          git -C _webclient sparse-checkout set \
-            yarn.lock \
-            applications/pass-desktop/native/Cargo.lock
+          git -C _webclient sparse-checkout set --no-cone \
+            /yarn.lock \
+            /applications/pass-desktop/native/Cargo.lock
 
       - name: Strip private-registry stanzas from yarn.lock
         if: steps.need-regen.outputs.needed == 'true'
@@ -150,7 +150,7 @@ print(m.group(1) if m else '')
       - name: Regenerate generated-sources.json
         if: steps.need-regen.outputs.needed == 'true'
         run: |
-          python3 _tools/node/flatpak-node-generator.py \
+          PYTHONPATH=_tools/node python3 -m flatpak_node_generator \
             --electron-node-headers \
             yarn _webclient/yarn-public.lock \
             -o generated-sources.json
@@ -232,12 +232,49 @@ print(m.group(1) if m else '')
             -e "s/${OLD_HASH}/${NEW_HASH}/" \
             me.proton.Pass.yml
 
+      - name: Update metainfo with new release entry
+        if: steps.need-regen.outputs.needed == 'true'
+        run: |
+          python3 - << 'EOF'
+          import re, subprocess, sys
+
+          tag = "${{ steps.upstream.outputs.tag }}"
+          version = tag.removeprefix("proton-pass@")
+
+          # Get the tagged commit's author date (YYYY-MM-DD) from the sparse clone.
+          date = subprocess.check_output(
+              ["git", "-C", "_webclient", "log", "-1", "--format=%as"],
+              text=True,
+          ).strip()
+
+          metainfo = "me.proton.Pass.metainfo.xml"
+          text = open(metainfo).read()
+
+          if f'version="{version}"' in text:
+              print(f"Release {version} already present in metainfo — nothing to do.")
+              sys.exit(0)
+
+          # Single-line entry with empty description, 8-space indent to match
+          # the existing metainfo style.
+          entry = f'        <release version="{version}" date="{date}"><description /></release>\n'
+
+          # Insert as the first child of <releases>.
+          updated = text.replace("    <releases>\n", f"    <releases>\n{entry}", 1)
+
+          if updated == text:
+              print("ERROR: could not find <releases> anchor in metainfo", file=sys.stderr)
+              sys.exit(1)
+
+          open(metainfo, "w").write(updated)
+          print(f'Added <release version="{version}" date="{date}"> to metainfo.')
+          EOF
+
       - name: Commit and push
         if: steps.need-regen.outputs.needed == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add generated-sources.json cargo-sources.json me.proton.Pass.yml
+          git add generated-sources.json cargo-sources.json me.proton.Pass.yml me.proton.Pass.metainfo.xml
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else
