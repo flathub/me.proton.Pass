@@ -11,11 +11,9 @@ command: start-proton-pass
 finish-args:
   - --share=ipc
   - --share=network
-  # Force X11 to work around a copy/paste regression under XWayland.
-  # https://github.com/flathub/me.proton.Pass/issues/37
-  # Revert to --socket=wayland + --socket=fallback-x11 once upstream fixes
-  # the Electron clipboard handling on Wayland.
-  - --socket=x11
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --filesystem=xdg-run/Clipboard
   # --device=all is required for FIDO2/U2F hardware security key support
   # (/dev/hidraw*). No portal exists for this yet; --device=dri alone is
   # insufficient. This matches the pattern used by Signal, Bitwarden, etc.
@@ -408,4 +406,4 @@ modules:
         dest-filename: start-proton-pass.sh
         commands:
           - env TMPDIR="$XDG_RUNTIME_DIR/app/${FLATPAK_ID:-me.proton.Pass}" zypak-wrapper
-            "/app/proton-pass/Proton Pass" --ozone-platform=x11 "$@"
+            "/app/proton-pass/Proton Pass" "$@"
