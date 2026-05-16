@@ -1,9 +1,12 @@
 app-id: me.proton.Pass
 runtime: org.freedesktop.Platform
-runtime-version: &runtime-version '25.08'
+runtime-version: &runtime-version "25.08"
 sdk: org.freedesktop.Sdk
 base: org.electronjs.Electron2.BaseApp
 base-version: *runtime-version
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.node22
+  - org.freedesktop.Sdk.Extension.rust-stable
 command: start-proton-pass
 finish-args:
   - --share=ipc
@@ -11,6 +14,9 @@ finish-args:
   - --socket=wayland
   - --socket=fallback-x11
   - --filesystem=xdg-run/Clipboard
+  # --device=all is required for FIDO2/U2F hardware security key support
+  # (/dev/hidraw*). No portal exists for this yet; --device=dri alone is
+  # insufficient. This matches the pattern used by Signal, Bitwarden, etc.
   - --device=all
   # DBus-based libsecret
   - --talk-name=org.freedesktop.secrets
@@ -20,7 +26,7 @@ finish-args:
 modules:
   - name: dbus-run-session
     buildsystem: cmake-ninja
-    cleanup: ['*']
+    cleanup: ["*"]
     sources:
       - type: archive
         url: https://gitlab.freedesktop.org/dbus/dbus/-/archive/dbus-1.16.2/dbus-dbus-1.16.2.tar.gz
@@ -55,11 +61,282 @@ modules:
           stable-only: true
   - name: proton-pass
     buildsystem: simple
+    # -----------------------------------------------------------------------
+    # MAINTENANCE — two generated files must be re-committed whenever the
+    # upstream source tag is bumped:
+    #
+    #   generated-sources.json  (JS/Node packages + Electron binary)
+    #   cargo-sources.json      (Rust crates for the native NAPI addon)
+    #
+    # In normal operation the update-generated-sources GitHub Actions workflow
+    # handles this automatically whenever Flathub's external-data-checker
+    # opens a version-bump PR.
+    #
+    # To regenerate manually (e.g. after a flatpak-node-generator update):
+    #
+    #   pip install aiohttp toml
+    #   git clone --depth=1 \
+    #     https://github.com/flatpak/flatpak-builder-tools.git _tools
+    #
+    #   # Sparse-checkout only the two lockfiles for the target tag:
+    #   git clone --filter=blob:none --sparse \
+    #     --branch proton-pass@<VERSION> \
+    #     https://github.com/ProtonMail/WebClients.git _webclient
+    #   git -C _webclient sparse-checkout set \
+    #     yarn.lock applications/pass-desktop/native/Cargo.lock
+    #
+    #   python3 strip-private-registry-lockfile-entries.py \
+    #     _webclient/yarn.lock _webclient/yarn-public.lock
+    #   python3 _tools/node/flatpak-node-generator.py \
+    #     --electron-node-headers yarn _webclient/yarn-public.lock \
+    #     -o generated-sources.json
+    #   python3 _tools/cargo/flatpak-cargo-generator.py \
+    #     _webclient/applications/pass-desktop/native/Cargo.lock \
+    #     -o cargo-sources.json
+    # -----------------------------------------------------------------------
+    build-options:
+      append-path: /usr/lib/sdk/node22/bin:/usr/lib/sdk/rust-stable/bin
+      env:
+        # Give build tools a writable home inside the build tree
+        HOME: /run/build/proton-pass
+        # Make is-ci return true, which short-circuits the root postinstall
+        # script ('is-ci || husky; yarn run config-app') without running the
+        # git-hook installer or config fetcher.
+        CI: "true"
+        # Prevents @sentry/cli's postinstall from downloading a pre-built
+        # binary over the network (not needed for the Flatpak build).
+        SENTRY_CLI_SKIP_DOWNLOAD: "1"
+        # CI=1 causes Yarn 4 to automatically enable --immutable, which rejects
+        # any install that would update the lockfile.  Our workspace filter
+        # modifies package.json (changing the dep graph), so the lockfile WILL
+        # differ — that is expected and intentional.  Explicitly disable it.
+        YARN_ENABLE_IMMUTABLE_INSTALLS: "0"
+        # Rust toolchain provided by the SDK extension
+        RUSTUP_HOME: /usr/lib/sdk/rust-stable
+        CARGO_HOME: /run/build/proton-pass/cargo
+        CARGO_NET_OFFLINE: "true"
+        # Points @electron/packager directly at the pre-fetched Electron zip
+        # directory via electronZipDir, bypassing @electron/get and its cache
+        # entirely — no XDG_CACHE_HOME or env-paths involved.
+        FLATPAK_ELECTRON_ZIP_DIR: /run/build/proton-pass/flatpak-node/cache/electron
+        # Disable all Yarn network access — packages come from the pre-fetched
+        # offline cache populated by generated-sources.json
+        YARN_ENABLE_NETWORK: "0"
+        YARN_ENABLE_TELEMETRY: "0"
+        YARN_ENABLE_INLINE_BUILDS: "1"
+        # Use only the project-local cache (not a shared global cache), and
+        # point the global folder at the pre-fetched tarballs placed by the
+        # generator in flatpak-node/yarn-berry/
+        YARN_ENABLE_GLOBAL_CACHE: "0"
+        YARN_GLOBAL_FOLDER: /run/build/proton-pass/flatpak-node/yarn-berry
+        # XDG_CACHE_HOME covers @electron/get's Electron binary lookup
+        # (checks $XDG_CACHE_HOME/electron/) as well as other tool caches
+        XDG_CACHE_HOME: /run/build/proton-pass/flatpak-node/cache
+        # Direct node-gyp / napi-rs to the SDK's Node.js headers
+        npm_config_nodedir: /usr/lib/sdk/node22
+        # Production build — disables dev-only webpack paths
+        NODE_ENV: production
     build-commands:
-      - bsdtar -Oxf ProtonPass.deb data.tar.xz | bsdtar -xf -
-      - mv "usr/lib/proton-pass" ${FLATPAK_DEST}/proton-pass
+      # ---- Strip private Proton registry config from .yarnrc.yml ----------
+      # The upstream .yarnrc.yml redirects certain npm scopes to private Proton
+      # registry servers (nexus.protontech.ch, gitlab.protontech.ch) and loads
+      # a postinstall plugin.  Strip these keys dynamically with a Python
+      # regex so the config stays valid for offline builds regardless of
+      # upstream formatting changes.  Replaces the fragile static
+      # remove-private-registries.patch.
+      - |
+        python3 -c "
+        import re, pathlib
+        text = pathlib.Path('.yarnrc.yml').read_text()
+        for pat in [
+          r'^plugins:\n([ \t]+.*\n)*',
+          r'^npmPublishRegistry:.*\n(\n)?',
+          r'^npmScopes:\n([ \t]+.*\n)*',
+          r'^npmPreapprovedPackages:\n([ \t]+.*\n)*',
+          r'^npmMinimalAgeGate:.*\n',
+        ]:
+          text = re.sub(pat, '', text, flags=re.MULTILINE)
+        pathlib.Path('.yarnrc.yml').write_text(text)
+        "
 
-      # To allow separate locales
+      # ---- Restrict workspaces to pass-desktop only ---------------------
+      # The monorepo contains many applications (meet, drive, lumo, mail,
+      # calendar, wallet, …) that depend on packages from Proton's internal
+      # npm registries (nexus.protontech.ch, gitlab.protontech.ch).  Those
+      # registries are unreachable from the Flatpak sandbox.
+      #
+      # pass-desktop only needs two application workspaces:
+      #   applications/pass-desktop  — the Electron app itself
+      #   applications/pass          — the web-app renderer (imported by webpack)
+      #
+      # We replace the catch-all applications/* glob with explicit entries
+      # for those two, and drop all test workspaces too.  Shared packages/*,
+      # utilities/*, and vendor/*/* are left untouched — they are public.
+      - |
+        node -e "
+          const fs = require('fs');
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          pkg.workspaces = pkg.workspaces
+            .filter(w => w !== 'applications/*' && !w.startsWith('tests'))
+            .filter(w => !w.startsWith('applications/') ||
+                         w === 'applications/pass-desktop/native' ||
+                         w === 'applications/pass' ||
+                         w === 'applications/pass-desktop')
+            .concat(['applications/pass', 'applications/pass-desktop']);
+          pkg.workspaces = [...new Set(pkg.workspaces)];
+          fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+        "
+
+      # Auto-discover and remove unresolvable dependencies across the entire
+      # monorepo.  Two categories break offline builds:
+      #
+      #  (A) Phantom workspace packages: declared as workspace:^ but absent
+      #      from the git tree (e.g. @rowsncolumns/* in docs-editor, which are
+      #      commercial external packages incorrectly referenced as workspace
+      #      deps).  Yarn Berry fails with "Workspace not found" for these.
+      #
+      #  (B) Private npm packages not in the offline cache (e.g. @proton-meet/*,
+      #      @tpe/*, @proton/proton-foundation-search).
+      #
+      # The script below auto-discovers both categories by comparing every
+      # dep against the set of package names actually present in the tree,
+      # and patches them out.  This replaces the former bespoke @rowsncolumns
+      # removal and will automatically catch future phantom deps without
+      # requiring a manifest update.
+      - |
+        node -e "
+          const fs = require('fs');
+          const path = require('path');
+          const glob = (dir, results=[]) => {
+            for (const f of fs.readdirSync(dir, {withFileTypes: true})) {
+              const full = path.join(dir, f.name);
+              if (f.isDirectory() && f.name !== 'node_modules' && f.name !== '.git') glob(full, results);
+              else if (f.name === 'package.json') results.push(full);
+            }
+            return results;
+          };
+          const cwd = process.cwd();
+          // Build the set of package names actually present in the repo tree.
+          const wsNames = new Set();
+          for (const p of glob(cwd)) {
+            try { const d = JSON.parse(fs.readFileSync(p,'utf8')); if (d.name) wsNames.add(d.name); } catch {}
+          }
+          // Private npm scopes unreachable from the offline sandbox.
+          const privateRe = /^(@proton-meet\/|@tpe\/)|^@proton\/proton-foundation-search\$/;
+          let totalRemoved = 0;
+          for (const p of glob(cwd)) {
+            try {
+              const pkg = JSON.parse(fs.readFileSync(p,'utf8'));
+              let changed = false;
+              for (const sec of ['dependencies','devDependencies','peerDependencies']) {
+                for (const dep of Object.keys(pkg[sec] || {})) {
+                  const ver = pkg[sec][dep];
+                  // Workspace protocol has two forms:
+                  //   Path-based: workspace:some/path  — Yarn resolves by path, not dep name.
+                  //     Phantom only if the target path does not exist in the repo.
+                  //   Name-based: workspace:^, workspace:*, workspace:~, workspace:1.x
+                  //     Phantom if the dep name is not the 'name' field of any package.json.
+                  let isPhantomWs = false;
+                  if (ver.startsWith('workspace:')) {
+                    const wsSpec = ver.slice('workspace:'.length);
+                    if (wsSpec.includes('/')) {
+                      isPhantomWs = !fs.existsSync(path.join(cwd, wsSpec));
+                    } else {
+                      isPhantomWs = !wsNames.has(dep);
+                    }
+                  }
+                  const isPrivateNpm = privateRe.test(dep);
+                  if (isPhantomWs || isPrivateNpm) {
+                    const rel = path.relative(cwd, p);
+                    console.log('Removing [' + (isPhantomWs?'phantom ws':'private npm') + '] ' + dep + ' from ' + rel);
+                    delete pkg[sec][dep];
+                    changed = true;
+                    totalRemoved++;
+                  }
+                }
+              }
+              if (changed) fs.writeFileSync(p, JSON.stringify(pkg, null, 2) + '\n');
+            } catch(e) { /* skip unreadable */ }
+          }
+          console.log('Done: removed ' + totalRemoved + ' unresolvable dep(s).');
+        "
+
+      # ---- JavaScript / TypeScript dependencies --------------------------
+      # Set up the SDK Node.js headers for node-gyp / napi-rs (symlinks the
+      # SDK include/ dir into the node-gyp cache expected by native builds).
+      - bash flatpak-node/setup_sdk_node_headers.sh
+
+      # Import the flatpak-yarn plugin generated by flatpak-node-generator.
+      # This plugin adds the `yarn convertToZip` command used in the next step.
+      - yarn plugin import $FLATPAK_BUILDER_BUILDDIR/flatpak-node/flatpak-yarn.js
+
+      # Convert the pre-fetched tarballs in flatpak-node/yarn-berry/cache/locator/
+      # to Yarn Berry's zip format in .yarn/cache/ so that `yarn install` can
+      # find them without network access.
+      - yarn convertToZip $(which yarn)
+
+      # Install all packages from the converted offline cache.
+      # --mode=skip-build suppresses postinstall scripts (native addons are
+      # compiled separately in the Rust step below).
+      # --immutable is intentionally omitted: pruning unneeded workspaces from
+      # package.json causes Yarn to update the lockfile, which --immutable
+      # would reject. YARN_ENABLE_NETWORK=0 ensures no network access occurs.
+      - yarn install --mode=skip-build
+
+      # ---- Rust native components ----------------------------------------
+      # Point cargo at the pre-fetched vendor crates (cargo-sources.json places
+      # them in cargo/vendor/ relative to the build root). We write the config
+      # into the native workspace's own .cargo/ directory so that cargo picks it
+      # up regardless of the working directory, and use an absolute path to
+      # avoid any config-relative resolution ambiguity.
+      - |
+        mkdir -p applications/pass-desktop/native/.cargo
+        cat > applications/pass-desktop/native/.cargo/config.toml << 'CARGOEOF'
+        [source.crates-io]
+        replace-with = "vendored-sources"
+
+        [source.vendored-sources]
+        directory = "/run/build/proton-pass/cargo/vendor"
+        CARGOEOF
+
+      # Compiles two crates inside applications/pass-desktop/native/:
+      #   • napi/   → native.linux-x64-gnu.node  (NAPI clipboard/input addon)
+      #   • host/   → proton_pass_nm_host         (browser native-messaging host)
+      # Crate sources are pre-fetched by cargo-sources.json into $CARGO_HOME.
+      - cd applications/pass-desktop && yarn run build:native
+
+      # ---- Electron Forge package ----------------------------------------
+      # Belt-and-suspenders: explicitly copy (not symlink) the pre-fetched
+      # Electron zip into the @electron/get cache hash directory.
+      # Cache key = sha256("https://github.com/electron/electron/releases/download/v39.5.2")
+      - |
+        EHASH=650aac941b88752ef9387b3b8b543359403599265dccc7b4daf0af12f06ee0d4
+        ECACHE=flatpak-node/cache/electron
+        mkdir -p "$ECACHE/$EHASH"
+        case "$FLATPAK_ARCH" in
+          aarch64) EZIP="electron-v39.5.2-linux-arm64.zip" ;;
+          *)       EZIP="electron-v39.5.2-linux-x64.zip"   ;;
+        esac
+        cp "$ECACHE/$EZIP" "$ECACHE/$EHASH/$EZIP" || true
+        cp "$ECACHE/SHASUMS256.txt-39.5.2" "$ECACHE/$EHASH/SHASUMS256.txt" || true
+
+      # Runs the webpack main + renderer builds, then packages the result into
+      # applications/pass-desktop/out/Proton Pass-linux-x64/
+      # The Electron 39 binary is resolved from XDG_CACHE_HOME/electron/
+      # (pre-fetched by generated-sources.json) rather than downloaded.
+      - cd applications/pass-desktop && yarn exec -- electron-forge package
+
+      # ---- Install -------------------------------------------------------
+      - |
+        case "$FLATPAK_ARCH" in
+          aarch64) ELECTRON_ARCH="arm64" ;;
+          arm)     ELECTRON_ARCH="armv7l" ;;
+          *)       ELECTRON_ARCH="x64" ;;
+        esac
+        cp -r "applications/pass-desktop/out/Proton Pass-linux-${ELECTRON_ARCH}" "${FLATPAK_DEST}/proton-pass"
+
+      # Split locale .pak files so the Flatpak runtime can install them as
+      # separate per-language extensions (same technique as Firefox/Chromium).
       # https://searchfox.org/mozilla-central/rev/8a4f55bc09ffc5c25dcb4586c51ae4a9fee77b4c/taskcluster/docker/firefox-flatpak/runme.sh#131-133
       - |
         for lang in ${FLATPAK_DEST}/proton-pass/locales/*.pak
@@ -69,42 +346,65 @@ modules:
           ln -sf "${FLATPAK_DEST}/share/runtime/locale/${locale%%-*}/$(basename $lang)" "${FLATPAK_DEST}/proton-pass/locales/$(basename $lang)"
         done
 
-      - install -Dm644 proton-pass.svg "${FLATPAK_DEST}/share/icons/hicolor/scalable/apps/${FLATPAK_ID}.svg"
-      - install -Dm644 usr/share/applications/proton-pass.desktop "${FLATPAK_DEST}/share/applications/${FLATPAK_ID}.desktop"
-      - desktop-file-edit --set-key=Exec --set-value='start-proton-pass %U' --set-icon=${FLATPAK_ID}
-        "${FLATPAK_DEST}/share/applications/${FLATPAK_ID}.desktop"
-      # Fix icon image
+      # Icon is in the upstream repo; no separate download needed
+      - install -Dm644 applications/pass-desktop/assets/logo.svg "${FLATPAK_DEST}/share/icons/hicolor/scalable/apps/${FLATPAK_ID}.svg"
+
+      # Desktop file — from this repo until upstreamed to ProtonMail/WebClients.
+      # TODO: once https://github.com/ProtonMail/WebClients has a committed
+      # applications/pass-desktop/assets/me.proton.Pass.desktop, replace the
+      # local file source with a reference to that path in the git checkout.
+      - install -Dm644 me.proton.Pass.desktop "${FLATPAK_DEST}/share/applications/${FLATPAK_ID}.desktop"
+
+      # Patch the asar archive so the Electron window's WM class matches the
+      # installed desktop file name (required for correct taskbar grouping in
+      # GNOME Shell and other compositors).
       - patch-electron-desktop-filename "${FLATPAK_DEST}/proton-pass/resources/app.asar"
 
-      # Install the wrapper script to start it.
-      - install -Dm 755 start-proton-pass.sh /app/bin/start-proton-pass
-      - install -Dm644 me.proton.Pass.metainfo.xml /app/share/metainfo/$FLATPAK_ID.metainfo.xml
+      - install -Dm644 me.proton.Pass.metainfo.xml "${FLATPAK_DEST}/share/metainfo/${FLATPAK_ID}.metainfo.xml"
+      - install -Dm644 LICENSE "${FLATPAK_DEST}/share/licenses/${FLATPAK_ID}/LICENSE"
+      - install -Dm755 start-proton-pass.sh /app/bin/start-proton-pass
+
     sources:
-      - type: file
-        dest-filename: ProtonPass.deb
-        only-arches: [x86_64]
-        url: https://proton.me/download/pass/linux/proton-pass_1.36.1_amd64.deb
-        # The upstream publishes sha512sum
-        sha512: 42b4e6852e92c4f2519aa2b0dc30c44f56dba1f21f27c2855ecc18f83e0295f44dfb13a5ebbf2c1eb53c11fddfb32435d28b96e8a9ada02c96389671ea37148b
+      # Full monorepo checkout is required: pass-desktop's webpack renderer
+      # imports from the sibling applications/pass web-app workspace, and
+      # the root yarn.lock covers all workspaces.
+      - type: git
+        url: https://github.com/ProtonMail/WebClients.git
+        tag: "proton-pass@1.36.1"
+        commit: 3b392281b3f0dd81b6967d5760ac46ff90850d89
         x-checker-data:
           type: json
-          # https://github.com/ProtonMail/WebClients/blob/d1a23fc2c4ab1e1632118baaee6f2531022ae4cf/applications/pass-desktop/tools/deploy.sh#L127
           url: https://proton.me/download/PassDesktop/linux/x64/version.json
           version-query: .Releases | map(select(.CategoryName == "Stable")) | .[0].Version
-          url-query: .Releases | map(select(.CategoryName == "Stable")) | .[0].File[0].Url
-          is-main-source: true
+          tag-query: '"proton-pass@" + (.Releases | map(select(.CategoryName == "Stable")) | .[0].Version)'
+
+      # Pre-fetched npm/yarn packages + Electron binary.
+      # Re-generate when yarn.lock changes (see MAINTENANCE comment above).
+      - generated-sources.json
+
+      # Pre-fetched Rust crates for applications/pass-desktop/native/.
+      # Re-generate when native/Cargo.lock changes (see MAINTENANCE comment above).
+      - cargo-sources.json
+
+      # Removes rustup target add calls and restricts Linux to the native arch
+      # gnu target only (no musl needed inside a Flatpak glibc runtime)
+      - type: patch
+        path: fix-native-build.patch
+
+      # Adds packagerConfig.electronZipDir from FLATPAK_ELECTRON_ZIP_DIR so
+      # @electron/packager resolves the pre-fetched Electron zip directly from
+      # the flatpak-node cache directory without any network fetch.
+      - type: patch
+        path: fix-forge-electron-cache.patch
 
       - type: file
-        dest-filename: proton-pass.svg
-        url: https://raw.githubusercontent.com/ProtonMail/WebClients/d1a23fc2c4ab1e1632118baaee6f2531022ae4cf/applications/pass-desktop/assets/logo.svg
-        sha256: 485abebe08af491753b9060c539f012c2c0a8d20a1e559d42f623c281ed691b9
-
-      - type: script
-        dest-filename: start-proton-pass.sh
-        # force x11 to workaround the copy issue: https://github.com/flathub/me.proton.Pass/issues/37
-        commands:
-          - env TMPDIR="$XDG_RUNTIME_DIR/app/${FLATPAK_ID:-me.proton.Pass}" zypak-wrapper
-            "/app/proton-pass/Proton Pass" "$@"
+        path: me.proton.Pass.desktop
 
       - type: file
         path: me.proton.Pass.metainfo.xml
+
+      - type: script
+        dest-filename: start-proton-pass.sh
+        commands:
+          - env TMPDIR="$XDG_RUNTIME_DIR/app/${FLATPAK_ID:-me.proton.Pass}" zypak-wrapper
+            "/app/proton-pass/Proton Pass" "$@"

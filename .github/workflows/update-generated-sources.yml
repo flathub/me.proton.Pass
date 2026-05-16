@@ -1,0 +1,266 @@
+name: Update generated sources
+
+# Fires automatically when a pull request that touches me.proton.Pass.yml
+# is opened or updated — most commonly when Flathub's external-data-checker
+# opens a version-bump PR.  The workflow regenerates generated-sources.json
+# and cargo-sources.json (and patches the manifest if the Electron version
+# changed), then commits the result back to the PR branch so the PR is
+# complete and ready to review.
+#
+# A workflow_dispatch trigger is also provided as a manual fallback,
+# e.g. to re-run after a flatpak-node-generator update.
+
+on:
+  pull_request:
+    paths:
+      - me.proton.Pass.yml
+  workflow_dispatch:
+
+# Prevent two regeneration runs from racing on the same branch.
+# cancel-in-progress: true means a newer push supersedes an older in-
+# progress run (the older run's regenerated output is stale).
+concurrency:
+  group: regenerate-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          # pull_request:     github.head_ref = the PR's source branch
+          # workflow_dispatch: github.ref     = the branch the run was triggered on
+          ref: ${{ github.head_ref || github.ref }}
+          # fetch-depth: 2 so that HEAD~1 is available for the tag-change
+          # check below.  (Default depth=1 would leave HEAD~1 missing and
+          # cause the check to always fall through to needed=true.)
+          # For a workflow_dispatch the check short-circuits before reading
+          # HEAD~1, so depth=2 is harmless there.
+          fetch-depth: 2
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+
+      - name: Install generator dependencies
+        run: pip install aiohttp pyyaml tomlkit
+
+      - name: Clone flatpak-builder-tools
+        run: git clone --depth=1 https://github.com/flatpak/flatpak-builder-tools.git _tools
+
+      # Read the tag that the external-data-checker wrote into the manifest
+      # so we can check out exactly the right upstream commit.
+      - name: Read upstream tag from manifest
+        id: upstream
+        run: |
+          TAG=$(python3 - << 'EOF'
+          import re, sys
+          text = open('me.proton.Pass.yml').read()
+          m = re.search(r'tag:\s*"(proton-pass@[\d.]+)"', text)
+          if m is None:
+              sys.exit('ERROR: could not find proton-pass tag in manifest')
+          print(m.group(1))
+          EOF
+          )
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Upstream tag: $TAG"
+
+      # For pull_request triggers: skip the heavy regeneration when the upstream tag
+      # is identical to HEAD~1 (e.g. a commit that only changed finish-args
+      # or the launcher script).  workflow_dispatch always regenerates.
+      - name: Check whether regeneration is needed
+        id: need-regen
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "Manual dispatch – always regenerate"
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          PREV_TAG=$(git show HEAD~1:me.proton.Pass.yml 2>/dev/null \
+            | python3 -c "
+import re, sys
+m = re.search(r'tag:\\s*\"(proton-pass@[\\d.]+)\"', sys.stdin.read())
+print(m.group(1) if m else '')
+" 2>/dev/null || echo "")
+
+          echo "Previous tag: ${PREV_TAG:-<none>}"
+          echo "Current tag:  ${{ steps.upstream.outputs.tag }}"
+
+          if [ -n "$PREV_TAG" ] && \
+             [ "$PREV_TAG" = "${{ steps.upstream.outputs.tag }}" ]; then
+            echo "Tag unchanged – skipping regeneration"
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Tag changed – regeneration needed"
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Only fetch the two lock files — no need to clone the full monorepo.
+      #
+      # Note: --depth=1 is intentionally omitted.  Combining it with
+      # --filter=blob:none creates a "partial shallow clone" that GitHub's
+      # Gitaly server occasionally rejects with exit code 128.  The partial
+      # clone filter alone already makes the fetch very lean: only commit/
+      # tree objects are transferred; blobs are fetched on-demand when the
+      # sparse-checkout materialises the two files below.
+      - name: Sparse-checkout WebClients at new tag
+        if: steps.need-regen.outputs.needed == 'true'
+        run: |
+          git clone \
+            --filter=blob:none \
+            --sparse \
+            --branch "${{ steps.upstream.outputs.tag }}" \
+            https://github.com/ProtonMail/WebClients.git \
+            _webclient
+          git -C _webclient sparse-checkout set --no-cone \
+            /yarn.lock \
+            /applications/pass-desktop/native/Cargo.lock
+
+      - name: Strip private-registry lockfile entries from yarn.lock
+        if: steps.need-regen.outputs.needed == 'true'
+        run: |
+          python3 strip-private-registry-lockfile-entries.py \
+            _webclient/yarn.lock \
+            _webclient/yarn-public.lock
+
+      - name: Regenerate generated-sources.json
+        if: steps.need-regen.outputs.needed == 'true'
+        run: |
+          PYTHONPATH=_tools/node python3 -m flatpak_node_generator \
+            --electron-node-headers \
+            yarn _webclient/yarn-public.lock \
+            -o generated-sources.json
+
+      # Playwright browser binaries are only needed for end-to-end tests,
+      # not at Flatpak build time — strip them to keep the file lean.
+      - name: Strip Playwright entries from generated-sources.json
+        if: steps.need-regen.outputs.needed == 'true'
+        run: |
+          python3 - << 'EOF'
+          import json
+          data = json.load(open('generated-sources.json'))
+          data = [e for e in data if not (
+              e.get('type') == 'archive' and 'cdn.playwright.dev' in e.get('url', '')
+              or e.get('type') == 'inline' and 'ms-playwright' in e.get('dest', '')
+          )]
+          with open('generated-sources.json', 'w') as f:
+              json.dump(data, f, indent=4)
+              f.write('\n')
+          EOF
+
+      - name: Regenerate cargo-sources.json
+        if: steps.need-regen.outputs.needed == 'true'
+        run: |
+          python3 _tools/cargo/flatpak-cargo-generator.py \
+            _webclient/applications/pass-desktop/native/Cargo.lock \
+            -o cargo-sources.json
+
+      # The manifest hardcodes the Electron version in three places:
+      #   EHASH   — sha256 of the @electron/get download URL (cache-key dir)
+      #   EZIP    — zip filenames for x64 and arm64
+      #   SHASUMS — SHASUMS256.txt filename suffix
+      # Detect the version from the freshly generated sources and patch all
+      # occurrences only when the version has actually changed.
+      - name: Update hardcoded Electron version in manifest
+        if: steps.need-regen.outputs.needed == 'true'
+        run: |
+          NEW_VER=$(python3 - << 'EOF'
+          import json, re
+          data = json.load(open('generated-sources.json'))
+          for e in data:
+              m = re.search(
+                  r'electron/releases/download/v([\d.]+)/electron-v[\d.]+-linux-x64\.zip',
+                  e.get('url', '')
+              )
+              if m:
+                  print(m.group(1))
+                  break
+          EOF
+          )
+          echo "Detected Electron version: $NEW_VER"
+
+          if [ -z "$NEW_VER" ]; then
+            echo "ERROR: could not detect Electron version from generated-sources.json" >&2
+            exit 1
+          fi
+
+          OLD_VER=$(grep -oP 'EZIP="electron-v\K[\d.]+(?=-linux)' me.proton.Pass.yml | head -1)
+          echo "Current Electron version: $OLD_VER"
+
+          if [ "$NEW_VER" = "$OLD_VER" ]; then
+            echo "Electron version unchanged, skipping manifest update"
+            exit 0
+          fi
+
+          echo "Electron version changed: $OLD_VER → $NEW_VER"
+
+          NEW_HASH=$(printf '%s' \
+            "https://github.com/electron/electron/releases/download/v${NEW_VER}" \
+            | sha256sum | awk '{print $1}')
+          echo "New EHASH: $NEW_HASH"
+
+          OLD_HASH=$(grep -oP 'EHASH=\K[0-9a-f]{64}' me.proton.Pass.yml)
+
+          sed -i \
+            -e "s/electron-v${OLD_VER}/electron-v${NEW_VER}/g" \
+            -e "s/SHASUMS256\.txt-${OLD_VER}/SHASUMS256.txt-${NEW_VER}/g" \
+            -e "s|/releases/download/v${OLD_VER}\"|/releases/download/v${NEW_VER}\"|" \
+            -e "s/${OLD_HASH}/${NEW_HASH}/" \
+            me.proton.Pass.yml
+
+      - name: Update metainfo with new release entry
+        if: steps.need-regen.outputs.needed == 'true'
+        run: |
+          python3 - << 'EOF'
+          import re, subprocess, sys
+
+          tag = "${{ steps.upstream.outputs.tag }}"
+          version = tag.removeprefix("proton-pass@")
+
+          # Get the tagged commit's author date (YYYY-MM-DD) from the sparse clone.
+          date = subprocess.check_output(
+              ["git", "-C", "_webclient", "log", "-1", "--format=%as"],
+              text=True,
+          ).strip()
+
+          metainfo = "me.proton.Pass.metainfo.xml"
+          text = open(metainfo).read()
+
+          if f'version="{version}"' in text:
+              print(f"Release {version} already present in metainfo — nothing to do.")
+              sys.exit(0)
+
+          # Single-line entry with empty description, 8-space indent to match
+          # the existing metainfo style.
+          entry = f'        <release version="{version}" date="{date}"><description /></release>\n'
+
+          # Insert as the first child of <releases>.
+          updated = text.replace("    <releases>\n", f"    <releases>\n{entry}", 1)
+
+          if updated == text:
+              print("ERROR: could not find <releases> anchor in metainfo", file=sys.stderr)
+              sys.exit(1)
+
+          open(metainfo, "w").write(updated)
+          print(f'Added <release version="{version}" date="{date}"> to metainfo.')
+          EOF
+
+      - name: Commit and push
+        if: steps.need-regen.outputs.needed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add generated-sources.json cargo-sources.json me.proton.Pass.yml me.proton.Pass.metainfo.xml
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: regenerate sources for ${{ steps.upstream.outputs.tag }}"
+            git push
+          fi
