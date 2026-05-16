@@ -12,8 +12,8 @@ name: Update generated sources
 
 on:
   pull_request:
-    # paths:
-    #   - me.proton.Pass.yml
+    paths:
+      - me.proton.Pass.yml
   workflow_dispatch:
 
 # Prevent two regeneration runs from racing on the same branch.
