@@ -1,41 +1,26 @@
 name: Update generated sources
 
-# Fires automatically when a branch (other than master) that touches
-# me.proton.Pass.yml is pushed — most commonly when Flathub's
-# external-data-checker opens a version-bump PR.  The workflow
-# regenerates generated-sources.json and cargo-sources.json (and patches
-# the manifest if the Electron version changed), then commits the result
-# back to the same branch so the PR is complete and ready to review.
+# Fires automatically when a pull request that touches me.proton.Pass.yml
+# is opened or updated — most commonly when Flathub's external-data-checker
+# opens a version-bump PR.  The workflow regenerates generated-sources.json
+# and cargo-sources.json (and patches the manifest if the Electron version
+# changed), then commits the result back to the PR branch so the PR is
+# complete and ready to review.
 #
 # A workflow_dispatch trigger is also provided as a manual fallback,
-# e.g. to re-run after a flatpak-node-generator update or to target a
-# specific branch by name.
+# e.g. to re-run after a flatpak-node-generator update.
 
 on:
-  push:
-    branches-ignore:
-      - master
+  pull_request:
     paths:
       - me.proton.Pass.yml
-
   workflow_dispatch:
-    inputs:
-      branch:
-        description: "Branch to update (blank = branch that triggered the dispatch)"
-        required: false
-        default: ""
 
 # Prevent two regeneration runs from racing on the same branch.
 # cancel-in-progress: true means a newer push supersedes an older in-
 # progress run (the older run's regenerated output is stale).
-#
-# Group key: push events set github.ref to "refs/heads/<branch>"; a
-# workflow_dispatch with inputs.branch set provides only the bare branch
-# name.  Normalise to refs/heads/<branch> in both cases so that a manual
-# dispatch targeting a branch shares the same concurrency slot as any
-# automated push-triggered run on that branch.
 concurrency:
-  group: regenerate-${{ inputs.branch != '' && format('refs/heads/{0}', inputs.branch) || github.ref }}
+  group: regenerate-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -50,9 +35,9 @@ jobs:
       - name: Check out branch
         uses: actions/checkout@v4
         with:
-          # Push trigger:            github.ref  = the pushed branch
-          # workflow_dispatch:       inputs.branch if set, else github.ref
-          ref: ${{ inputs.branch || github.ref }}
+          # pull_request:     github.head_ref = the PR's source branch
+          # workflow_dispatch: github.ref     = the branch the run was triggered on
+          ref: ${{ github.head_ref || github.ref }}
           # fetch-depth: 2 so that HEAD~1 is available for the tag-change
           # check below.  (Default depth=1 would leave HEAD~1 missing and
           # cause the check to always fall through to needed=true.)
@@ -61,9 +46,7 @@ jobs:
           fetch-depth: 2
 
       - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.x"
+        uses: actions/setup-python@v6
 
       - name: Install generator dependencies
         run: pip install aiohttp pyyaml tomlkit
@@ -88,7 +71,7 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "Upstream tag: $TAG"
 
-      # For push triggers: skip the heavy regeneration when the upstream tag
+      # For pull_request triggers: skip the heavy regeneration when the upstream tag
       # is identical to HEAD~1 (e.g. a commit that only changed finish-args
       # or the launcher script).  workflow_dispatch always regenerates.
       - name: Check whether regeneration is needed
