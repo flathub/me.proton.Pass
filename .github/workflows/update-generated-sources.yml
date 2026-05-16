@@ -83,14 +83,9 @@ jobs:
             exit 0
           fi
 
-          PREV_TAG=$(git show HEAD~1:me.proton.Pass.yml 2>/dev/null \
-            | python3 -c "
-import re, sys
-m = re.search(r'tag:\\s*\"(proton-pass@[\\d.]+)\"', sys.stdin.read())
-print(m.group(1) if m else '')
-" 2>/dev/null || echo "")
+          PREV_TAG=$(git show HEAD~1:me.proton.Pass.yml 2>/dev/null | python3 -c "import re, sys; m = re.search(r'tag:\\s*\\\"(proton-pass@[\\d.]+)\\\"', sys.stdin.read()); print(m.group(1) if m else '')" 2>/dev/null || echo "")
 
-          echo "Previous tag: ${PREV_TAG:-<none>}"
+          echo "Previous tag: $PREV_TAG"
           echo "Current tag:  ${{ steps.upstream.outputs.tag }}"
 
           if [ -n "$PREV_TAG" ] && \
