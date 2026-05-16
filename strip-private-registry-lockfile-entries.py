@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-strip-private-registry-stanzas.py — remove private-registry package stanzas
+strip-private-registry-lockfile-entries.py — remove private-registry lockfile entries
 from a Yarn 4 lockfile before running flatpak-node-generator.
 
 Usage:
-    python3 strip-private-registry-stanzas.py <input-yarn.lock> <output-yarn.lock>
+    python3 strip-private-registry-lockfile-entries.py <input-yarn.lock> <output-yarn.lock>
 
 Background
 ----------
@@ -26,8 +26,8 @@ This script identifies every top-level Yarn 4 lockfile stanza whose package:
      to a Proton private server.
   3. Matches a hard-coded known-private package name.
 
-It removes those stanzas and writes the cleaned lockfile to the output path.
-Dependency declarations *inside* workspace stanzas that reference removed
+It removes those lockfile entries and writes the cleaned lockfile to the output path.
+Dependency declarations *inside* workspace lockfile entries that reference removed
 packages are left in place — they are harmless because the generator only
 processes top-level stanza keys, not nested values.
 
@@ -42,7 +42,7 @@ import re
 import sys
 
 
-def strip_private_stanzas(input_path: str, output_path: str) -> None:
+def strip_private_lockfile_entries(input_path: str, output_path: str) -> None:
     with open(input_path, encoding="utf-8") as f:
         lines = f.readlines()
 
@@ -88,7 +88,7 @@ def strip_private_stanzas(input_path: str, output_path: str) -> None:
             ranges_to_remove.append((stanza_start, stanza_end))
 
     if not ranges_to_remove:
-        print("No private stanzas found — writing unchanged lockfile.")
+        print("No private lockfile entries found — writing unchanged lockfile.")
     else:
         print(f"Removing {len(ranges_to_remove)} private stanza(s):")
         for s, e in ranges_to_remove:
@@ -113,4 +113,4 @@ def strip_private_stanzas(input_path: str, output_path: str) -> None:
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         sys.exit(f"Usage: {sys.argv[0]} <input-yarn.lock> <output-yarn.lock>")
-    strip_private_stanzas(sys.argv[1], sys.argv[2])
+    strip_private_lockfile_entries(sys.argv[1], sys.argv[2])

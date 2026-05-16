@@ -85,7 +85,7 @@ modules:
     #   git -C _webclient sparse-checkout set \
     #     yarn.lock applications/pass-desktop/native/Cargo.lock
     #
-    #   python3 strip-private-registry-stanzas.py \
+    #   python3 strip-private-registry-lockfile-entries.py \
     #     _webclient/yarn.lock _webclient/yarn-public.lock
     #   python3 _tools/node/flatpak-node-generator.py \
     #     --electron-node-headers yarn _webclient/yarn-public.lock \

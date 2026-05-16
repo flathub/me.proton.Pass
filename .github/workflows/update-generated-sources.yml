@@ -140,10 +140,10 @@ print(m.group(1) if m else '')
             /yarn.lock \
             /applications/pass-desktop/native/Cargo.lock
 
-      - name: Strip private-registry stanzas from yarn.lock
+      - name: Strip private-registry lockfile entries from yarn.lock
         if: steps.need-regen.outputs.needed == 'true'
         run: |
-          python3 strip-private-registry-stanzas.py \
+          python3 strip-private-registry-lockfile-entries.py \
             _webclient/yarn.lock \
             _webclient/yarn-public.lock
 
