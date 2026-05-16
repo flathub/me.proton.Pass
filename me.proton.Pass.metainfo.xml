@@ -7,14 +7,15 @@
     <summary>Encrypted password manager to keep your login credentials safe</summary>
 
     <metadata_license>CC0-1.0</metadata_license>
-    <project_license>GPL-3.0-only</project_license>
+    <project_license>GPL-3.0</project_license>
     <developer id="ch.protonmail">
         <name>Proton AG</name>
     </developer>
     <project_group>Proton</project_group>
 
     <description>
-        <p>This is a community package of Proton Pass and is not officially supported by Proton AG.</p>
+        <p>**NOTE: This a wrapper of the official packages, but it is not verified, affiliated with,
+            or supported by Proton AG.**</p>
 
         <p>Get the password manager created by the scientists who met at CERN behind Proton Mail,
             the
