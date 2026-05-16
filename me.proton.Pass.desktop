@@ -1,7 +1,7 @@
 [Desktop Entry]
 Name=Proton Pass
 GenericName=Password Manager
-Comment=Open-source and secure identity manager.
+Comment=Securely store, share, and autofill your credentials.
 Exec=start-proton-pass %U
 Icon=me.proton.Pass
 Terminal=false
