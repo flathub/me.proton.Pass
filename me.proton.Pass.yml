@@ -308,17 +308,17 @@ modules:
       # ---- Electron Forge package ----------------------------------------
       # Belt-and-suspenders: explicitly copy (not symlink) the pre-fetched
       # Electron zip into the @electron/get cache hash directory.
-      # Cache key = sha256("https://github.com/electron/electron/releases/download/v39.5.2")
+      # Cache key = sha256("https://github.com/electron/electron/releases/download/v39.8.4")
       - |
-        EHASH=650aac941b88752ef9387b3b8b543359403599265dccc7b4daf0af12f06ee0d4
+        EHASH=31be49719c13a53bce6267b816faae5d567eccedac1aaa92dd94194a5f300340
         ECACHE=flatpak-node/cache/electron
         mkdir -p "$ECACHE/$EHASH"
         case "$FLATPAK_ARCH" in
-          aarch64) EZIP="electron-v39.5.2-linux-arm64.zip" ;;
-          *)       EZIP="electron-v39.5.2-linux-x64.zip"   ;;
+          aarch64) EZIP="electron-v39.8.4-linux-arm64.zip" ;;
+          *)       EZIP="electron-v39.8.4-linux-x64.zip"   ;;
         esac
         cp "$ECACHE/$EZIP" "$ECACHE/$EHASH/$EZIP" || true
-        cp "$ECACHE/SHASUMS256.txt-39.5.2" "$ECACHE/$EHASH/SHASUMS256.txt" || true
+        cp "$ECACHE/SHASUMS256.txt-39.8.4" "$ECACHE/$EHASH/SHASUMS256.txt" || true
 
       # Runs the webpack main + renderer builds, then packages the result into
       # applications/pass-desktop/out/Proton Pass-linux-x64/
