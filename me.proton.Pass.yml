@@ -1,6 +1,6 @@
 app-id: me.proton.Pass
 runtime: org.freedesktop.Platform
-runtime-version: &runtime-version "25.08"
+runtime-version: &runtime-version '25.08'
 sdk: org.freedesktop.Sdk
 base: org.electronjs.Electron2.BaseApp
 base-version: *runtime-version
@@ -26,7 +26,7 @@ finish-args:
 modules:
   - name: dbus-run-session
     buildsystem: cmake-ninja
-    cleanup: ["*"]
+    cleanup: ['*']
     sources:
       - type: archive
         url: https://gitlab.freedesktop.org/dbus/dbus/-/archive/dbus-1.16.2/dbus-dbus-1.16.2.tar.gz
@@ -102,32 +102,32 @@ modules:
         # Make is-ci return true, which short-circuits the root postinstall
         # script ('is-ci || husky; yarn run config-app') without running the
         # git-hook installer or config fetcher.
-        CI: "true"
+        CI: 'true'
         # Prevents @sentry/cli's postinstall from downloading a pre-built
         # binary over the network (not needed for the Flatpak build).
-        SENTRY_CLI_SKIP_DOWNLOAD: "1"
+        SENTRY_CLI_SKIP_DOWNLOAD: '1'
         # CI=1 causes Yarn 4 to automatically enable --immutable, which rejects
         # any install that would update the lockfile.  Our workspace filter
         # modifies package.json (changing the dep graph), so the lockfile WILL
         # differ — that is expected and intentional.  Explicitly disable it.
-        YARN_ENABLE_IMMUTABLE_INSTALLS: "0"
+        YARN_ENABLE_IMMUTABLE_INSTALLS: '0'
         # Rust toolchain provided by the SDK extension
         RUSTUP_HOME: /usr/lib/sdk/rust-stable
         CARGO_HOME: /run/build/proton-pass/cargo
-        CARGO_NET_OFFLINE: "true"
+        CARGO_NET_OFFLINE: 'true'
         # Points @electron/packager directly at the pre-fetched Electron zip
         # directory via electronZipDir, bypassing @electron/get and its cache
         # entirely — no XDG_CACHE_HOME or env-paths involved.
         FLATPAK_ELECTRON_ZIP_DIR: /run/build/proton-pass/flatpak-node/cache/electron
         # Disable all Yarn network access — packages come from the pre-fetched
         # offline cache populated by generated-sources.json
-        YARN_ENABLE_NETWORK: "0"
-        YARN_ENABLE_TELEMETRY: "0"
-        YARN_ENABLE_INLINE_BUILDS: "1"
+        YARN_ENABLE_NETWORK: '0'
+        YARN_ENABLE_TELEMETRY: '0'
+        YARN_ENABLE_INLINE_BUILDS: '1'
         # Use only the project-local cache (not a shared global cache), and
         # point the global folder at the pre-fetched tarballs placed by the
         # generator in flatpak-node/yarn-berry/
-        YARN_ENABLE_GLOBAL_CACHE: "0"
+        YARN_ENABLE_GLOBAL_CACHE: '0'
         YARN_GLOBAL_FOLDER: /run/build/proton-pass/flatpak-node/yarn-berry
         # XDG_CACHE_HOME covers @electron/get's Electron binary lookup
         # (checks $XDG_CACHE_HOME/electron/) as well as other tool caches
@@ -308,17 +308,17 @@ modules:
       # ---- Electron Forge package ----------------------------------------
       # Belt-and-suspenders: explicitly copy (not symlink) the pre-fetched
       # Electron zip into the @electron/get cache hash directory.
-      # Cache key = sha256("https://github.com/electron/electron/releases/download/v39.5.2")
+      # Cache key = sha256("https://github.com/electron/electron/releases/download/v39.8.4")
       - |
-        EHASH=650aac941b88752ef9387b3b8b543359403599265dccc7b4daf0af12f06ee0d4
+        EHASH=31be49719c13a53bce6267b816faae5d567eccedac1aaa92dd94194a5f300340
         ECACHE=flatpak-node/cache/electron
         mkdir -p "$ECACHE/$EHASH"
         case "$FLATPAK_ARCH" in
-          aarch64) EZIP="electron-v39.5.2-linux-arm64.zip" ;;
-          *)       EZIP="electron-v39.5.2-linux-x64.zip"   ;;
+          aarch64) EZIP="electron-v39.8.4-linux-arm64.zip" ;;
+          *)       EZIP="electron-v39.8.4-linux-x64.zip"   ;;
         esac
         cp "$ECACHE/$EZIP" "$ECACHE/$EHASH/$EZIP" || true
-        cp "$ECACHE/SHASUMS256.txt-39.5.2" "$ECACHE/$EHASH/SHASUMS256.txt" || true
+        cp "$ECACHE/SHASUMS256.txt-39.8.4" "$ECACHE/$EHASH/SHASUMS256.txt" || true
 
       # Runs the webpack main + renderer builds, then packages the result into
       # applications/pass-desktop/out/Proton Pass-linux-x64/
@@ -370,13 +370,14 @@ modules:
       # the root yarn.lock covers all workspaces.
       - type: git
         url: https://github.com/ProtonMail/WebClients.git
-        tag: "proton-pass@1.36.1"
-        commit: 3b392281b3f0dd81b6967d5760ac46ff90850d89
+        tag: proton-pass@1.37.0
+        commit: 82ad1c89d9e89e8f047cd27f4f170d25081aae76
         x-checker-data:
           type: json
           url: https://proton.me/download/PassDesktop/linux/x64/version.json
           version-query: .Releases | map(select(.CategoryName == "Stable")) | .[0].Version
-          tag-query: '"proton-pass@" + (.Releases | map(select(.CategoryName == "Stable")) | .[0].Version)'
+          tag-query: '"proton-pass@" + (.Releases | map(select(.CategoryName == "Stable"))
+            | .[0].Version)'
 
       # Pre-fetched npm/yarn packages + Electron binary.
       # Re-generate when yarn.lock changes (see MAINTENANCE comment above).

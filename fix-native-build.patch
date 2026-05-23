@@ -1,14 +1,13 @@
 --- a/applications/pass-desktop/native/build.js	2026-04-12 22:38:26.737679204 -0400
-+++ b/applications/pass-desktop/native/build.js	2026-04-12 22:38:26.773209302 -0400
-@@ -6,16 +6,18 @@
-             return ['x86_64-pc-windows-msvc'];
++++ b/applications/pass-desktop/native/build.js	2026-05-23 00:00:00.000000000 +0000
+@@ -7,18 +7,20 @@
          case 'darwin':
              return ['x86_64-apple-darwin', 'aarch64-apple-darwin'];
 -        case 'linux':
 -            // If building on a parallels VM - switch target
 -            // architecture to arm64 and run with `ELECTRON_DISABLE_SANDBOX=1`
 -            // return ['aarch64-unknown-linux-gnu'];
--            return ['x86_64-unknown-linux-musl', 'x86_64-unknown-linux-gnu'];
+-            return ['x86_64-unknown-linux-gnu'];
 +        case 'linux': {
 +            // Flatpak: build for the native arch with glibc only.
 +            // musl targets are not needed inside a Flatpak glibc runtime.
@@ -21,7 +20,9 @@
  })();
  
  for (const target of targets) {
+-    // Ensure rust target
 -    execSync(`rustup target add ${target}`, { stdio: 'inherit' });
-     execSync(`npm run build -- --target ${target}`, { stdio: 'inherit' });
- }
- 
++    // Flatpak SDK already includes the required Rust target.
+     // Build napi bindings
+     execSync(`npm run build:napi -- --target ${target}`, { stdio: 'inherit' });
+     // Build rust host

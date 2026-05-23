@@ -45,6 +45,11 @@ jobs:
           # HEAD~1, so depth=2 is harmless there.
           fetch-depth: 2
 
+      - name: Fetch pull request base branch
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags origin "${{ github.base_ref }}" --depth=1
+
       - name: Set up Python
         uses: actions/setup-python@v6
 
@@ -62,7 +67,7 @@ jobs:
           TAG=$(python3 - << 'EOF'
           import re, sys
           text = open('me.proton.Pass.yml').read()
-          m = re.search(r'tag:\s*"(proton-pass@[\d.]+)"', text)
+          m = re.search(r'tag:\s*["\']?(proton-pass@[\d.]+)["\']?', text)
           if m is None:
               sys.exit('ERROR: could not find proton-pass tag in manifest')
           print(m.group(1))
@@ -71,9 +76,9 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "Upstream tag: $TAG"
 
-      # For pull_request triggers: skip the heavy regeneration when the upstream tag
-      # is identical to HEAD~1 (e.g. a commit that only changed finish-args
-      # or the launcher script).  workflow_dispatch always regenerates.
+      # For pull_request triggers: skip the heavy regeneration when the tag in
+      # the PR branch matches the tag in the base branch.  workflow_dispatch
+      # always regenerates.
       - name: Check whether regeneration is needed
         id: need-regen
         run: |
@@ -83,17 +88,19 @@ jobs:
             exit 0
           fi
 
-          PREV_TAG=$(git show HEAD~1:me.proton.Pass.yml 2>/dev/null | python3 -c "import re, sys; m = re.search(r'tag:\\s*\\\"(proton-pass@[\\d.]+)\\\"', sys.stdin.read()); print(m.group(1) if m else '')" 2>/dev/null || echo "")
+          CURRENT_TAG="${{ steps.upstream.outputs.tag }}"
 
-          echo "Previous tag: $PREV_TAG"
-          echo "Current tag:  ${{ steps.upstream.outputs.tag }}"
+          BASE_TAG=$(git show "origin/${{ github.base_ref }}:me.proton.Pass.yml" 2>/dev/null | python3 -c "import re, sys; m = re.search(r'tag:\\s*[\\\"\\']?(proton-pass@[\\d.]+)[\\\"\\']?', sys.stdin.read()); print(m.group(1) if m else '')" 2>/dev/null || echo "")
 
-          if [ -n "$PREV_TAG" ] && \
-             [ "$PREV_TAG" = "${{ steps.upstream.outputs.tag }}" ]; then
-            echo "Tag unchanged – skipping regeneration"
+          echo "Base tag:     $BASE_TAG"
+          echo "Current tag:   $CURRENT_TAG"
+
+          if [ -n "$BASE_TAG" ] && \
+             [ "$BASE_TAG" = "$CURRENT_TAG" ]; then
+            echo "Version unchanged vs base branch – skipping regeneration"
             echo "needed=false" >> "$GITHUB_OUTPUT"
           else
-            echo "Tag changed – regeneration needed"
+            echo "Version changed vs base branch – regeneration needed"
             echo "needed=true" >> "$GITHUB_OUTPUT"
           fi
 
