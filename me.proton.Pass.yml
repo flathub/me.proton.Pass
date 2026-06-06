@@ -375,9 +375,8 @@ modules:
         x-checker-data:
           type: json
           url: https://proton.me/download/PassDesktop/linux/x64/version.json
-          version-query: .Releases | map(select(.CategoryName == "Stable")) | .[0].Version
-          tag-query: '"proton-pass@" + (.Releases | map(select(.CategoryName == "Stable"))
-            | .[0].Version)'
+          version-query: .Releases | sort_by(.Version | split(".") | map(tonumber)) | .[-1].Version
+          tag-query: '"proton-pass@" + (.Releases | sort_by(.Version | split(".") | map(tonumber)) | .[-1].Version)'
 
       # Pre-fetched npm/yarn packages + Electron binary.
       # Re-generate when yarn.lock changes (see MAINTENANCE comment above).
