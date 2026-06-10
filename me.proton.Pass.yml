@@ -371,7 +371,7 @@ modules:
       - type: git
         url: https://github.com/ProtonMail/WebClients.git
         tag: proton-pass@1.37.0
-        commit: ad2c3c287a5ff7914d36902b75a9bfca6fc1f664
+        commit: 82ad1c89d9e89e8f047cd27f4f170d25081aae76
         x-checker-data:
           type: json
           url: https://proton.me/download/PassDesktop/linux/x64/version.json
