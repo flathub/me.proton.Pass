@@ -390,8 +390,8 @@ modules:
       # the root yarn.lock covers all workspaces.
       - type: git
         url: https://github.com/ProtonMail/WebClients.git
-        tag: proton-pass@1.38.0
-        commit: db723f3a338c3770153123e3aee52ae7a5c7be2a
+        tag: proton-pass@1.38.1
+        commit: 6effc90bb5d3c82013482b871024c7b718025ca7
         x-checker-data:
           type: json
           url: https://proton.me/download/PassDesktop/linux/x64/version.json
