@@ -216,10 +216,30 @@ modules:
             return results;
           };
           const cwd = process.cwd();
-          // Build the set of package names actually present in the repo tree.
+          // Load root package.json workspaces list to only count active workspaces
+          const rootPkg = JSON.parse(fs.readFileSync(path.join(cwd, 'package.json'), 'utf8'));
+          const workspaces = rootPkg.workspaces || [];
+          const matchWorkspace = (pattern, relDir) => {
+            const patternParts = pattern.split('/');
+            const pathParts = relDir.split(path.sep);
+            if (patternParts.length !== pathParts.length) return false;
+            for (let i = 0; i < patternParts.length; i++) {
+              if (patternParts[i] === '*') continue;
+              if (patternParts[i] !== pathParts[i]) return false;
+            }
+            return true;
+          };
+          // Build the set of package names actually present in the repo tree and active in workspaces.
           const wsNames = new Set();
           for (const p of glob(cwd)) {
-            try { const d = JSON.parse(fs.readFileSync(p,'utf8')); if (d.name) wsNames.add(d.name); } catch {}
+            try {
+              const relDir = path.relative(cwd, path.dirname(p));
+              const isWs = workspaces.some(w => matchWorkspace(w, relDir));
+              if (isWs) {
+                const d = JSON.parse(fs.readFileSync(p,'utf8'));
+                if (d.name) wsNames.add(d.name);
+              }
+            } catch {}
           }
           // Private npm scopes unreachable from the offline sandbox.
           const privateRe = /^(@proton-meet\/|@tpe\/)|^@proton\/proton-foundation-search\$/;
