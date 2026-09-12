@@ -53,8 +53,8 @@ modules:
       - /share/man
     sources:
       - type: archive
-        url: https://download.gnome.org/sources/libsecret/0.21/libsecret-0.21.7.tar.xz
-        sha256: 6b452e4750590a2b5617adc40026f28d2f4903de15f1250e1d1c40bfd68ed55e
+        url: https://download.gnome.org/sources/libsecret/0.21/libsecret-0.21.8.tar.xz
+        sha256: 70e7279ccc7e8cce1bb0e1c57a3785e2c79aea6d1dd9a538abda3886f11cdf72
         x-checker-data:
           type: gnome
           name: libsecret
@@ -390,8 +390,8 @@ modules:
       # the root yarn.lock covers all workspaces.
       - type: git
         url: https://github.com/ProtonMail/WebClients.git
-        tag: proton-pass@1.40.0
-        commit: 7e0a4161f8b871ce9514c1e3cb80831941bd5e4d
+        tag: proton-pass@1.40.2
+        commit: 49d318ed19e7fff27057ad2631a024a99e619250
         x-checker-data:
           type: json
           url: https://proton.me/download/PassDesktop/linux/x64/version.json
