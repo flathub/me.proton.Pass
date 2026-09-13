@@ -1,11 +1,12 @@
 app-id: me.proton.Pass
 runtime: org.freedesktop.Platform
-runtime-version: &runtime-version '25.08'
+runtime-version: &runtime-version '26.08'
 sdk: org.freedesktop.Sdk
 base: org.electronjs.Electron2.BaseApp
 base-version: *runtime-version
 sdk-extensions:
-  - org.freedesktop.Sdk.Extension.node22
+  # https://github.com/ProtonMail/WebClients/blob/01ef302942ffbd2baf0c346289d4d790d6b6d28a/package.json#L75
+  - org.freedesktop.Sdk.Extension.node24
   - org.freedesktop.Sdk.Extension.rust-stable
 command: start-proton-pass
 finish-args:
