@@ -11,8 +11,10 @@ command: start-proton-pass
 finish-args:
   - --share=ipc
   - --share=network
-  - --socket=wayland
-  - --socket=fallback-x11
+  # Both are required to allow copying credentials
+  # https://github.com/flathub/me.proton.Pass/issues/37#issuecomment-4441457420
+  - --socket=wayland  # for Electron
+  - --socket=x11  # for arboard
   - --filesystem=xdg-run/Clipboard
   # --device=all is required for FIDO2/U2F hardware security key support
   # (/dev/hidraw*). No portal exists for this yet; --device=dri alone is
