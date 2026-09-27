@@ -10,3 +10,4 @@ Categories=Utility;Security;
 Keywords=password;manager;vault;credentials;security;encryption;2fa;totp;login;proton;
 StartupWMClass=Proton Pass
 StartupNotify=true
+MimeType=x-scheme-handler/protonpass;
