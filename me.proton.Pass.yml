@@ -12,8 +12,10 @@ command: start-proton-pass
 finish-args:
   - --share=ipc
   - --share=network
-  - --socket=wayland
-  - --socket=fallback-x11
+  # Both are required to allow copying credentials
+  # https://github.com/flathub/me.proton.Pass/issues/37#issuecomment-4441457420
+  - --socket=wayland  # for Electron
+  - --socket=x11  # for arboard
   - --filesystem=xdg-run/Clipboard
   # --device=all is required for FIDO2/U2F hardware security key support
   # (/dev/hidraw*). No portal exists for this yet; --device=dri alone is
@@ -54,8 +56,8 @@ modules:
       - /share/man
     sources:
       - type: archive
-        url: https://download.gnome.org/sources/libsecret/0.21/libsecret-0.21.7.tar.xz
-        sha256: 6b452e4750590a2b5617adc40026f28d2f4903de15f1250e1d1c40bfd68ed55e
+        url: https://download.gnome.org/sources/libsecret/0.21/libsecret-0.21.8.2.tar.xz
+        sha256: 142948339c5b971d8f6a8c7099521f6fd319b6fe73d2694b4e6d3310ed28b6e6
         x-checker-data:
           type: gnome
           name: libsecret
@@ -391,8 +393,8 @@ modules:
       # the root yarn.lock covers all workspaces.
       - type: git
         url: https://github.com/ProtonMail/WebClients.git
-        tag: proton-pass@1.40.0
-        commit: 7e0a4161f8b871ce9514c1e3cb80831941bd5e4d
+        tag: proton-pass@1.40.2
+        commit: 49d318ed19e7fff27057ad2631a024a99e619250
         x-checker-data:
           type: json
           url: https://proton.me/download/PassDesktop/linux/x64/version.json
