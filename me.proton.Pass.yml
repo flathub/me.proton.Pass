@@ -1,11 +1,12 @@
 app-id: me.proton.Pass
 runtime: org.freedesktop.Platform
-runtime-version: &runtime-version '25.08'
+runtime-version: &runtime-version '26.08'
 sdk: org.freedesktop.Sdk
 base: org.electronjs.Electron2.BaseApp
 base-version: *runtime-version
 sdk-extensions:
-  - org.freedesktop.Sdk.Extension.node22
+  # https://github.com/ProtonMail/WebClients/blob/01ef302942ffbd2baf0c346289d4d790d6b6d28a/package.json#L75
+  - org.freedesktop.Sdk.Extension.node24
   - org.freedesktop.Sdk.Extension.rust-stable
 command: start-proton-pass
 finish-args:
@@ -97,7 +98,7 @@ modules:
     #     -o cargo-sources.json
     # -----------------------------------------------------------------------
     build-options:
-      append-path: /usr/lib/sdk/node22/bin:/usr/lib/sdk/rust-stable/bin
+      append-path: /usr/lib/sdk/node24/bin:/usr/lib/sdk/rust-stable/bin
       env:
         # Give build tools a writable home inside the build tree
         HOME: /run/build/proton-pass
@@ -135,7 +136,7 @@ modules:
         # (checks $XDG_CACHE_HOME/electron/) as well as other tool caches
         XDG_CACHE_HOME: /run/build/proton-pass/flatpak-node/cache
         # Direct node-gyp / napi-rs to the SDK's Node.js headers
-        npm_config_nodedir: /usr/lib/sdk/node22
+        npm_config_nodedir: /usr/lib/sdk/node24
         # Production build — disables dev-only webpack paths
         NODE_ENV: production
     build-commands:
