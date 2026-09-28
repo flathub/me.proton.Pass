@@ -35,6 +35,8 @@ jobs:
       - name: Check out branch
         uses: actions/checkout@v4
         with:
+          # Fork PRs: the branch lives in the fork, not in this repo.
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
           # pull_request:     github.head_ref = the PR's source branch
           # workflow_dispatch: github.ref     = the branch the run was triggered on
           ref: ${{ github.head_ref || github.ref }}
@@ -48,7 +50,9 @@ jobs:
       - name: Fetch pull request base branch
         if: github.event_name == 'pull_request'
         run: |
-          git fetch --no-tags origin "${{ github.base_ref }}" --depth=1
+          # origin may be a fork, so fetch the base branch from the base repo.
+          git fetch --no-tags "https://github.com/${{ github.repository }}.git" \
+            "${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}" --depth=1
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -256,12 +260,19 @@ jobs:
 
       - name: Commit and push
         if: steps.need-regen.outputs.needed == 'true'
+        env:
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add generated-sources.json cargo-sources.json me.proton.Pass.yml me.proton.Pass.metainfo.xml
           if git diff --cached --quiet; then
             echo "No changes to commit"
+          elif [ "$HEAD_REPO" != "${{ github.repository }}" ]; then
+            # The token can't push to a fork, so the fork PR has to commit these itself.
+            git diff --cached --stat
+            echo "::error::Generated sources are out of date. Regenerate them and commit to $HEAD_REPO."
+            exit 1
           else
             git commit -m "chore: regenerate sources for ${{ steps.upstream.outputs.tag }}"
             git push

@@ -16,6 +16,10 @@ to Proton's private npm registries:
                      → https://nexus.protontech.ch/repository/foundation-npm/
     @tpe/*           → https://gitlab.protontech.ch/.../packages/npm/
 
+It also contains xlsx resolved from https://cdn.sheetjs.com/, used only by
+applications/lumo. flatpak-node-generator looks that version up on npm, where
+it doesn't exist.
+
 These packages are NOT needed by the applications/pass-desktop or
 applications/pass workspaces.  flatpak-node-generator would try to resolve
 them from the public npm registry and fail with HTTP 404 errors.
@@ -82,6 +86,8 @@ def strip_private_lockfile_entries(input_path: str, output_path: str) -> None:
             or "__archiveUrl" in stanza
             # Known private @proton/* packages
             or re.match(r'^"@proton/proton-foundation-search@', header)
+            # xlsx from the SheetJS CDN (lumo only, not on npm)
+            or re.match(r'^"xlsx@https://cdn\.sheetjs\.com/', header)
         )
 
         if is_private:
