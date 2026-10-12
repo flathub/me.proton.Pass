@@ -126,8 +126,8 @@ jobs:
             https://github.com/ProtonMail/WebClients.git \
             _webclient
           git -C _webclient sparse-checkout set --no-cone \
-            /yarn.lock \
-            /applications/pass-desktop/native/Cargo.lock
+            yarn.lock \
+            applications/pass-desktop/native/Cargo.lock
 
       - name: Strip private-registry lockfile entries from yarn.lock
         if: steps.need-regen.outputs.needed == 'true'
