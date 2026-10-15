@@ -139,13 +139,16 @@ modules:
       #   applications/pass          — the web-app renderer (imported by webpack)
       #
       # We replace the catch-all applications/* glob with explicit entries
-      # for those two and drop all test workspaces.
+      # for those two, drop all test workspaces, and remove the supply-chain
+      # age gate policy (which requires online npm registry metadata).
       - |
         python3 -c "
         import pathlib, re
         text = pathlib.Path('pnpm-workspace.yaml').read_text()
         text = text.replace('    - applications/*', '    - applications/pass\n    - applications/pass-desktop')
         text = re.sub(r'    - tests.*\n', '', text)
+        text = re.sub(r'minimumReleaseAge:\s*\d+\s*\n', '', text)
+        text = re.sub(r'minimumReleaseAgeExclude:\s*\n(?:\s*-\s*.*\n)*', '', text)
         pathlib.Path('pnpm-workspace.yaml').write_text(text)
         "
 
