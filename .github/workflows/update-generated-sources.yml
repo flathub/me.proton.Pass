@@ -126,22 +126,23 @@ jobs:
             https://github.com/ProtonMail/WebClients.git \
             _webclient
           git -C _webclient sparse-checkout set --no-cone \
-            /yarn.lock \
+            /pnpm-lock.yaml \
             /applications/pass-desktop/native/Cargo.lock
 
-      - name: Strip private-registry lockfile entries from yarn.lock
+      - name: Strip private-registry lockfile entries from pnpm-lock.yaml
         if: steps.need-regen.outputs.needed == 'true'
         run: |
           python3 strip-private-registry-lockfile-entries.py \
-            _webclient/yarn.lock \
-            _webclient/yarn-public.lock
+            _webclient/pnpm-lock.yaml \
+            _webclient/pnpm-public.lock
 
       - name: Regenerate generated-sources.json
         if: steps.need-regen.outputs.needed == 'true'
         run: |
           PYTHONPATH=_tools/node python3 -m flatpak_node_generator \
             --electron-node-headers \
-            yarn _webclient/yarn-public.lock \
+            --pnpm-store-version v11 \
+            pnpm _webclient/pnpm-public.lock \
             -o generated-sources.json
 
       # Playwright browser binaries are only needed for end-to-end tests,

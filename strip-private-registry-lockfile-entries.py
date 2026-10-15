@@ -46,65 +46,118 @@ import re
 import sys
 
 
-def strip_private_lockfile_entries(input_path: str, output_path: str) -> None:
-    with open(input_path, encoding="utf-8") as f:
-        lines = f.readlines()
-
-    ranges_to_remove: list[tuple[int, int]] = []  # (start, end) exclusive
-
+def strip_private_pnpm_lockfile_entries(lines: list[str]) -> list[str]:
+    in_packages = False
+    ranges_to_remove: list[tuple[int, int, str]] = []
     i = 0
     while i < len(lines):
         line = lines[i]
-
-        # Top-level stanza headers start with a double-quote in column 0.
-        if not line.startswith('"'):
+        if line.startswith("packages:"):
+            in_packages = True
             i += 1
             continue
+        elif line.strip() and not line.startswith(" ") and not line.startswith("---"):
+            in_packages = False
 
-        header = line.strip()
-        stanza_start = i
+        if in_packages and line.startswith("  ") and not line.startswith("    ") and line.strip().endswith(":"):
+            stanza_start = i
+            header = line.strip()
+            i += 1
+            while i < len(lines) and (lines[i].startswith("    ") or lines[i].strip() == ""):
+                i += 1
+            stanza_end = i
+            stanza = "".join(lines[stanza_start:stanza_end])
+            is_private = (
+                "@proton-meet/" in header
+                or "@tpe/" in header
+                or "@proton/proton-foundation-search" in header
+                or "xlsx@https://cdn.sheetjs.com/" in header
+                or "nexus.protontech.ch" in stanza
+                or "gitlab.protontech.ch" in stanza
+            )
+            if is_private:
+                ranges_to_remove.append((stanza_start, stanza_end, header))
+            continue
         i += 1
-
-        # Collect the stanza body (indented lines + blank lines).
-        while i < len(lines) and (lines[i].startswith(" ") or lines[i].strip() == ""):
-            i += 1
-        stanza_end = i  # exclusive
-
-        stanza = "".join(lines[stanza_start:stanza_end])
-
-        # Skip workspace packages (linkType: soft).
-        if "linkType: soft" in stanza:
-            continue
-
-        # Classify as private if any of the following criteria match:
-        is_private = (
-            # @proton-meet/* scope with npm: protocol
-            (re.match(r'^"@proton-meet/', header) and "npm:" in header)
-            # @tpe/* scope with npm: protocol
-            or (re.match(r'^"@tpe/', header) and "npm:" in header)
-            # Package resolved from a Proton private archive URL
-            or "__archiveUrl" in stanza
-            # Known private @proton/* packages
-            or re.match(r'^"@proton/proton-foundation-search@', header)
-            # xlsx from the SheetJS CDN (lumo only, not on npm)
-            or re.match(r'^"xlsx@https://cdn\.sheetjs\.com/', header)
-        )
-
-        if is_private:
-            ranges_to_remove.append((stanza_start, stanza_end))
 
     if not ranges_to_remove:
         print("No private lockfile entries found — writing unchanged lockfile.")
     else:
-        print(f"Removing {len(ranges_to_remove)} private stanza(s):")
-        for s, e in ranges_to_remove:
-            print(f"  lines {s + 1}–{e}: {lines[s].strip()[:70]}")
+        print(f"Removing {len(ranges_to_remove)} private package stanza(s):")
+        for s, e, h in ranges_to_remove:
+            print(f"  lines {s + 1}–{e}: {h}")
 
     remove_indices: set[int] = set()
-    for s, e in ranges_to_remove:
+    for s, e, h in ranges_to_remove:
         remove_indices.update(range(s, e))
 
-    new_lines = [l for idx, l in enumerate(lines) if idx not in remove_indices]
+    return [l for idx, l in enumerate(lines) if idx not in remove_indices]
+
+
+def strip_private_lockfile_entries(input_path: str, output_path: str) -> None:
+    with open(input_path, encoding="utf-8") as f:
+        lines = f.readlines()
+
+    is_pnpm = any("lockfileVersion:" in line for line in lines[:20])
+
+    if is_pnpm:
+        new_lines = strip_private_pnpm_lockfile_entries(lines)
+    else:
+        ranges_to_remove: list[tuple[int, int]] = []  # (start, end) exclusive
+
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+
+            # Top-level stanza headers start with a double-quote in column 0.
+            if not line.startswith('"'):
+                i += 1
+                continue
+
+            header = line.strip()
+            stanza_start = i
+            i += 1
+
+            # Collect the stanza body (indented lines + blank lines).
+            while i < len(lines) and (lines[i].startswith(" ") or lines[i].strip() == ""):
+                i += 1
+            stanza_end = i  # exclusive
+
+            stanza = "".join(lines[stanza_start:stanza_end])
+
+            # Skip workspace packages (linkType: soft).
+            if "linkType: soft" in stanza:
+                continue
+
+            # Classify as private if any of the following criteria match:
+            is_private = (
+                # @proton-meet/* scope with npm: protocol
+                (re.match(r'^"@proton-meet/', header) and "npm:" in header)
+                # @tpe/* scope with npm: protocol
+                or (re.match(r'^"@tpe/', header) and "npm:" in header)
+                # Package resolved from a Proton private archive URL
+                or "__archiveUrl" in stanza
+                # Known private @proton/* packages
+                or re.match(r'^"@proton/proton-foundation-search@', header)
+                # xlsx from the SheetJS CDN (lumo only, not on npm)
+                or re.match(r'^"xlsx@https://cdn\.sheetjs\.com/', header)
+            )
+
+            if is_private:
+                ranges_to_remove.append((stanza_start, stanza_end))
+
+        if not ranges_to_remove:
+            print("No private lockfile entries found — writing unchanged lockfile.")
+        else:
+            print(f"Removing {len(ranges_to_remove)} private stanza(s):")
+            for s, e in ranges_to_remove:
+                print(f"  lines {s + 1}–{e}: {lines[s].strip()[:70]}")
+
+        remove_indices: set[int] = set()
+        for s, e in ranges_to_remove:
+            remove_indices.update(range(s, e))
+
+        new_lines = [l for idx, l in enumerate(lines) if idx not in remove_indices]
 
     with open(output_path, "w", encoding="utf-8") as f:
         f.writelines(new_lines)
@@ -118,5 +171,5 @@ def strip_private_lockfile_entries(input_path: str, output_path: str) -> None:
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        sys.exit(f"Usage: {sys.argv[0]} <input-yarn.lock> <output-yarn.lock>")
+        sys.exit(f"Usage: {sys.argv[0]} <input-lockfile> <output-lockfile>")
     strip_private_lockfile_entries(sys.argv[1], sys.argv[2])

@@ -77,7 +77,7 @@ modules:
     #
     # To regenerate manually (e.g. after a flatpak-node-generator update):
     #
-    #   pip install aiohttp toml
+    #   pip install aiohttp pyyaml tomlkit
     #   git clone --depth=1 \
     #     https://github.com/flatpak/flatpak-builder-tools.git _tools
     #
@@ -85,35 +85,29 @@ modules:
     #   git clone --filter=blob:none --sparse \
     #     --branch proton-pass@<VERSION> \
     #     https://github.com/ProtonMail/WebClients.git _webclient
-    #   git -C _webclient sparse-checkout set \
-    #     yarn.lock applications/pass-desktop/native/Cargo.lock
+    #   git -C _webclient sparse-checkout set --no-cone \
+    #     /pnpm-lock.yaml /applications/pass-desktop/native/Cargo.lock
     #
     #   python3 strip-private-registry-lockfile-entries.py \
-    #     _webclient/yarn.lock _webclient/yarn-public.lock
+    #     _webclient/pnpm-lock.yaml _webclient/pnpm-public.lock
     #   python3 _tools/node/flatpak-node-generator.py \
-    #     --electron-node-headers yarn _webclient/yarn-public.lock \
+    #     --electron-node-headers --pnpm-store-version v11 \
+    #     pnpm _webclient/pnpm-public.lock \
     #     -o generated-sources.json
     #   python3 _tools/cargo/flatpak-cargo-generator.py \
     #     _webclient/applications/pass-desktop/native/Cargo.lock \
     #     -o cargo-sources.json
     # -----------------------------------------------------------------------
     build-options:
-      append-path: /usr/lib/sdk/node24/bin:/usr/lib/sdk/rust-stable/bin
+      append-path: /usr/lib/sdk/node24/bin:/usr/lib/sdk/rust-stable/bin:/run/build/proton-pass/.bin
       env:
         # Give build tools a writable home inside the build tree
         HOME: /run/build/proton-pass
-        # Make is-ci return true, which short-circuits the root postinstall
-        # script ('is-ci || husky; yarn run config-app') without running the
-        # git-hook installer or config fetcher.
+        # Make is-ci return true, which short-circuits root lifecycle scripts
         CI: 'true'
         # Prevents @sentry/cli's postinstall from downloading a pre-built
         # binary over the network (not needed for the Flatpak build).
         SENTRY_CLI_SKIP_DOWNLOAD: '1'
-        # CI=1 causes Yarn 4 to automatically enable --immutable, which rejects
-        # any install that would update the lockfile.  Our workspace filter
-        # modifies package.json (changing the dep graph), so the lockfile WILL
-        # differ — that is expected and intentional.  Explicitly disable it.
-        YARN_ENABLE_IMMUTABLE_INSTALLS: '0'
         # Rust toolchain provided by the SDK extension
         RUSTUP_HOME: /usr/lib/sdk/rust-stable
         CARGO_HOME: /run/build/proton-pass/cargo
@@ -122,16 +116,6 @@ modules:
         # directory via electronZipDir, bypassing @electron/get and its cache
         # entirely — no XDG_CACHE_HOME or env-paths involved.
         FLATPAK_ELECTRON_ZIP_DIR: /run/build/proton-pass/flatpak-node/cache/electron
-        # Disable all Yarn network access — packages come from the pre-fetched
-        # offline cache populated by generated-sources.json
-        YARN_ENABLE_NETWORK: '0'
-        YARN_ENABLE_TELEMETRY: '0'
-        YARN_ENABLE_INLINE_BUILDS: '1'
-        # Use only the project-local cache (not a shared global cache), and
-        # point the global folder at the pre-fetched tarballs placed by the
-        # generator in flatpak-node/yarn-berry/
-        YARN_ENABLE_GLOBAL_CACHE: '0'
-        YARN_GLOBAL_FOLDER: /run/build/proton-pass/flatpak-node/yarn-berry
         # XDG_CACHE_HOME covers @electron/get's Electron binary lookup
         # (checks $XDG_CACHE_HOME/electron/) as well as other tool caches
         XDG_CACHE_HOME: /run/build/proton-pass/flatpak-node/cache
@@ -140,27 +124,9 @@ modules:
         # Production build — disables dev-only webpack paths
         NODE_ENV: production
     build-commands:
-      # ---- Strip private Proton registry config from .yarnrc.yml ----------
-      # The upstream .yarnrc.yml redirects certain npm scopes to private Proton
-      # registry servers (nexus.protontech.ch, gitlab.protontech.ch) and loads
-      # a postinstall plugin.  Strip these keys dynamically with a Python
-      # regex so the config stays valid for offline builds regardless of
-      # upstream formatting changes.  Replaces the fragile static
-      # remove-private-registries.patch.
-      - |
-        python3 -c "
-        import re, pathlib
-        text = pathlib.Path('.yarnrc.yml').read_text()
-        for pat in [
-          r'^plugins:\n([ \t]+.*\n)*',
-          r'^npmPublishRegistry:.*\n(\n)?',
-          r'^npmScopes:\n([ \t]+.*\n)*',
-          r'^npmPreapprovedPackages:\n([ \t]+.*\n)*',
-          r'^npmMinimalAgeGate:.*\n',
-        ]:
-          text = re.sub(pat, '', text, flags=re.MULTILINE)
-        pathlib.Path('.yarnrc.yml').write_text(text)
-        "
+      # ---- Remove private Proton registries and setup pnpm ----------------
+      - rm -f .npmrc
+      - install -Dm755 pnpm-exe/pnpm .bin/pnpm
 
       # ---- Restrict workspaces to pass-desktop only ---------------------
       # The monorepo contains many applications (meet, drive, lumo, mail,
@@ -173,30 +139,21 @@ modules:
       #   applications/pass          — the web-app renderer (imported by webpack)
       #
       # We replace the catch-all applications/* glob with explicit entries
-      # for those two, and drop all test workspaces too.  Shared packages/*,
-      # utilities/*, and vendor/*/* are left untouched — they are public.
+      # for those two and drop all test workspaces.
       - |
-        node -e "
-          const fs = require('fs');
-          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-          pkg.workspaces = pkg.workspaces
-            .filter(w => w !== 'applications/*' && !w.startsWith('tests'))
-            .filter(w => !w.startsWith('applications/') ||
-                         w === 'applications/pass-desktop/native' ||
-                         w === 'applications/pass' ||
-                         w === 'applications/pass-desktop')
-            .concat(['applications/pass', 'applications/pass-desktop']);
-          pkg.workspaces = [...new Set(pkg.workspaces)];
-          fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+        python3 -c "
+        import pathlib, re
+        text = pathlib.Path('pnpm-workspace.yaml').read_text()
+        text = text.replace('    - applications/*', '    - applications/pass\n    - applications/pass-desktop')
+        text = re.sub(r'    - tests.*\n', '', text)
+        pathlib.Path('pnpm-workspace.yaml').write_text(text)
         "
 
       # Auto-discover and remove unresolvable dependencies across the entire
       # monorepo.  Two categories break offline builds:
       #
       #  (A) Phantom workspace packages: declared as workspace:^ but absent
-      #      from the git tree (e.g. @rowsncolumns/* in docs-editor, which are
-      #      commercial external packages incorrectly referenced as workspace
-      #      deps).  Yarn Berry fails with "Workspace not found" for these.
+      #      from the git tree.
       #
       #  (B) Private npm packages not in the offline cache (e.g. @proton-meet/*,
       #      @tpe/*, @proton/proton-foundation-search).
@@ -219,9 +176,10 @@ modules:
             return results;
           };
           const cwd = process.cwd();
-          // Load root package.json workspaces list to only count active workspaces
-          const rootPkg = JSON.parse(fs.readFileSync(path.join(cwd, 'package.json'), 'utf8'));
-          const workspaces = rootPkg.workspaces || [];
+          // Load active workspaces from pnpm-workspace.yaml
+          const wsYaml = fs.readFileSync(path.join(cwd, 'pnpm-workspace.yaml'), 'utf8');
+          const wsMatch = wsYaml.match(/packages:\s*\n((?:\s*-\s*.*\n)+)/);
+          const workspaces = wsMatch ? wsMatch[1].split('\n').map(l => l.replace(/^\s*-\s*/, '').trim()).filter(Boolean) : [];
           const matchWorkspace = (pattern, relDir) => {
             const patternParts = pattern.split('/');
             const pathParts = relDir.split(path.sep);
@@ -245,7 +203,7 @@ modules:
             } catch {}
           }
           // Private npm scopes unreachable from the offline sandbox.
-          const privateRe = /^(@proton-meet\/|@tpe\/)|^@proton\/proton-foundation-search\$/;
+          const privateRe = /^(@proton-meet\/|@tpe\/)|^@proton\/proton-foundation-search$/;
           let totalRemoved = 0;
           for (const p of glob(cwd)) {
             try {
@@ -255,7 +213,7 @@ modules:
                 for (const dep of Object.keys(pkg[sec] || {})) {
                   const ver = pkg[sec][dep];
                   // Workspace protocol has two forms:
-                  //   Path-based: workspace:some/path  — Yarn resolves by path, not dep name.
+                  //   Path-based: workspace:some/path  — resolves by path, not dep name.
                   //     Phantom only if the target path does not exist in the repo.
                   //   Name-based: workspace:^, workspace:*, workspace:~, workspace:1.x
                   //     Phantom if the dep name is not the 'name' field of any package.json.
@@ -285,26 +243,10 @@ modules:
         "
 
       # ---- JavaScript / TypeScript dependencies --------------------------
-      # Set up the SDK Node.js headers for node-gyp / napi-rs (symlinks the
-      # SDK include/ dir into the node-gyp cache expected by native builds).
-      - bash flatpak-node/setup_sdk_node_headers.sh
-
-      # Import the flatpak-yarn plugin generated by flatpak-node-generator.
-      # This plugin adds the `yarn convertToZip` command used in the next step.
-      - yarn plugin import $FLATPAK_BUILDER_BUILDDIR/flatpak-node/flatpak-yarn.js
-
-      # Convert the pre-fetched tarballs in flatpak-node/yarn-berry/cache/locator/
-      # to Yarn Berry's zip format in .yarn/cache/ so that `yarn install` can
-      # find them without network access.
-      - yarn convertToZip $(which yarn)
-
-      # Install all packages from the converted offline cache.
-      # --mode=skip-build suppresses postinstall scripts (native addons are
-      # compiled separately in the Rust step below).
-      # --immutable is intentionally omitted: pruning unneeded workspaces from
-      # package.json causes Yarn to update the lockfile, which --immutable
-      # would reject. YARN_ENABLE_NETWORK=0 ensures no network access occurs.
-      - yarn install --mode=skip-build
+      # Install all packages from the offline pnpm store populated by generated-sources.json.
+      # --ignore-scripts suppresses lifecycle scripts (native addons are compiled separately below).
+      # --no-frozen-lockfile allows installation when workspaces/dependencies are pruned in CI.
+      - pnpm install --offline --no-frozen-lockfile --ignore-scripts
 
       # ---- Rust native components ----------------------------------------
       # Point cargo at the pre-fetched vendor crates (cargo-sources.json places
@@ -326,7 +268,7 @@ modules:
       #   • napi/   → native.linux-x64-gnu.node  (NAPI clipboard/input addon)
       #   • host/   → proton_pass_nm_host         (browser native-messaging host)
       # Crate sources are pre-fetched by cargo-sources.json into $CARGO_HOME.
-      - cd applications/pass-desktop && yarn run build:native
+      - cd applications/pass-desktop && pnpm run build:native
 
       # ---- Electron Forge package ----------------------------------------
       # Belt-and-suspenders: explicitly copy (not symlink) the pre-fetched
@@ -347,7 +289,7 @@ modules:
       # applications/pass-desktop/out/Proton Pass-linux-x64/
       # The Electron 39 binary is resolved from XDG_CACHE_HOME/electron/
       # (pre-fetched by generated-sources.json) rather than downloaded.
-      - cd applications/pass-desktop && yarn exec -- electron-forge package
+      - cd applications/pass-desktop && pnpm exec electron-forge package
 
       # ---- Install -------------------------------------------------------
       - |
@@ -402,8 +344,21 @@ modules:
           tag-query: '"proton-pass@" + (.Releases | map(select(.CategoryName == "Stable"))
             | .[0].Version)'
 
-      # Pre-fetched npm/yarn packages + Electron binary.
-      # Re-generate when yarn.lock changes (see MAINTENANCE comment above).
+      # Pre-built standalone pnpm executable
+      - type: archive
+        url: https://registry.npmjs.org/@pnpm/exe.linux-x64/-/exe.linux-x64-12.8.1.tgz
+        sha512: f1b0d9d2566509d8b6aef9c5ba5ec4620702ef329e5927bbeb2f09576a17a1b692f29f62f5de8f49fe8b80bb533347c8ed1f4e87878b09bbde5f2343326bd9fa
+        dest: pnpm-exe
+        only-arches: [x86_64]
+
+      - type: archive
+        url: https://registry.npmjs.org/@pnpm/exe.linux-arm64/-/exe.linux-arm64-12.8.1.tgz
+        sha512: ab8b3d6bd5f63b737d69e505a285b6e28acdaf1beedb4fa3c9550547945a9cf0aa38a28f06b82cda2cb0324041c75697924cdd593e78fe67f3f017bcb0995613
+        dest: pnpm-exe
+        only-arches: [aarch64]
+
+      # Pre-fetched npm/pnpm packages + Electron binary.
+      # Re-generate when pnpm-lock.yaml changes (see MAINTENANCE comment above).
       - generated-sources.json
 
       # Pre-fetched Rust crates for applications/pass-desktop/native/.
