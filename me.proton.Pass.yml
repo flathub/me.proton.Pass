@@ -249,9 +249,9 @@ modules:
       # ---- JavaScript / TypeScript dependencies --------------------------
       # Install all packages from the offline pnpm store populated by generated-sources.json.
       # --ignore-scripts suppresses lifecycle scripts (native addons are compiled separately below).
-      # --no-frozen-lockfile allows installation when workspaces/dependencies are pruned in CI.
+      # --frozen-lockfile uses the exact resolved lockfile without online metadata resolution.
       # --trust-lockfile skips supply-chain policy verification (which requires online npm metadata).
-      - pnpm install --offline --no-frozen-lockfile --trust-lockfile --ignore-scripts
+      - pnpm install --offline --frozen-lockfile --trust-lockfile --ignore-scripts
 
       # ---- Rust native components ----------------------------------------
       # Point cargo at the pre-fetched vendor crates (cargo-sources.json places
