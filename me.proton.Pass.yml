@@ -149,6 +149,7 @@ modules:
         text = re.sub(r'    - tests.*\n', '', text)
         text = re.sub(r'minimumReleaseAge:\s*\d+\s*\n', '', text)
         text = re.sub(r'minimumReleaseAgeExclude:\s*\n(?:\s*-\s*.*\n)*', '', text)
+        text += '\ntrustLockfile: true\n'
         pathlib.Path('pnpm-workspace.yaml').write_text(text)
         "
 
@@ -249,7 +250,8 @@ modules:
       # Install all packages from the offline pnpm store populated by generated-sources.json.
       # --ignore-scripts suppresses lifecycle scripts (native addons are compiled separately below).
       # --no-frozen-lockfile allows installation when workspaces/dependencies are pruned in CI.
-      - pnpm install --offline --no-frozen-lockfile --ignore-scripts
+      # --trust-lockfile skips supply-chain policy verification (which requires online npm metadata).
+      - pnpm install --offline --no-frozen-lockfile --trust-lockfile --ignore-scripts
 
       # ---- Rust native components ----------------------------------------
       # Point cargo at the pre-fetched vendor crates (cargo-sources.json places
