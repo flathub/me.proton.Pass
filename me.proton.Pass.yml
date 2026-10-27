@@ -175,17 +175,17 @@ modules:
       # ---- Electron Forge package ----------------------------------------
       # Belt-and-suspenders: explicitly copy (not symlink) the pre-fetched
       # Electron zip into the @electron/get cache hash directory.
-      # Cache key = sha256("https://github.com/electron/electron/releases/download/v39.8.10")
+      # Cache key = sha256("https://github.com/electron/electron/releases/download/v43.7.6")
       - |
-        EHASH=41a5d68646d956d50e13830e121ea0b3d6ab378b6a0ce422aefc1ff214707879
+        EHASH=839b6db86ad94d1d797347ae0b317933b6575fe66906be5f4ba9437c891b0c53
         ECACHE=flatpak-node/cache/electron
         mkdir -p "$ECACHE/$EHASH"
         case "$FLATPAK_ARCH" in
-          aarch64) EZIP="electron-v39.8.10-linux-arm64.zip" ;;
-          *)       EZIP="electron-v39.8.10-linux-x64.zip"   ;;
+          aarch64) EZIP="electron-v43.7.6-linux-arm64.zip" ;;
+          *)       EZIP="electron-v43.7.6-linux-x64.zip"   ;;
         esac
         cp "$ECACHE/$EZIP" "$ECACHE/$EHASH/$EZIP" || true
-        cp "$ECACHE/SHASUMS256.txt-39.8.10" "$ECACHE/$EHASH/SHASUMS256.txt" || true
+        cp "$ECACHE/SHASUMS256.txt-43.7.6" "$ECACHE/$EHASH/SHASUMS256.txt" || true
 
       # Runs the webpack main + renderer builds, then packages the result into
       # applications/pass-desktop/out/Proton Pass-linux-x64/
@@ -237,8 +237,8 @@ modules:
       # the root pnpm-lock.yaml covers all workspaces.
       - type: git
         url: https://github.com/ProtonMail/WebClients.git
-        tag: proton-pass@1.42.0
-        commit: 08bbb1ccdaeeabdad8a831932a148b12ad5dc2b1
+        tag: proton-pass@1.43.0
+        commit: 5014891bafcf77c773f738b9b3cb9d8a052bfc53
         x-checker-data:
           type: json
           url: https://proton.me/download/PassDesktop/linux/x64/version.json

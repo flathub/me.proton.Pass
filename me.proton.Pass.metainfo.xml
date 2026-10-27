@@ -146,6 +146,7 @@
     </content_rating>
 
     <releases>
+        <release version="1.43.0" date="2026-10-20"><description /></release>
         <release version="1.42.0" date="2026-10-13">
             <description></description>
         </release>
