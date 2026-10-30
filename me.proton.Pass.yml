@@ -32,12 +32,14 @@ modules:
     cleanup: ['*']
     sources:
       - type: archive
-        url: https://gitlab.freedesktop.org/dbus/dbus/-/archive/dbus-1.16.2/dbus-dbus-1.16.2.tar.gz
+        url: 
+          https://gitlab.freedesktop.org/dbus/dbus/-/archive/dbus-1.16.2/dbus-dbus-1.16.2.tar.gz
         sha256: d77cc71acd93e85f2bd2a6fe3a40e5bd023519e3e9fa9b5361e7109f42b74060
         x-checker-data:
           type: anitya
           project-id: 5356
-          url-template: https://gitlab.freedesktop.org/dbus/dbus/-/archive/dbus-$version/dbus-dbus-$version.tar.gz
+          url-template: 
+            https://gitlab.freedesktop.org/dbus/dbus/-/archive/dbus-$version/dbus-dbus-$version.tar.gz
   # fix auto logout
   # https://github.com/flathub/org.signal.Signal/pull/756/commits/2caf105b18f906e7707f67b3cf7384a21f461564
   - name: libsecret
@@ -99,7 +101,8 @@ modules:
     #     -o cargo-sources.json
     # -----------------------------------------------------------------------
     build-options:
-      prepend-path: /usr/lib/sdk/node24/bin:/usr/lib/sdk/rust-stable/bin:/run/build/proton-pass/.bin:/run/build/proton-pass/node_modules/.bin
+      prepend-path: 
+        /usr/lib/sdk/node24/bin:/usr/lib/sdk/rust-stable/bin:/run/build/proton-pass/.bin:/run/build/proton-pass/node_modules/.bin
       env:
         # Give build tools a writable home inside the build tree
         HOME: /run/build/proton-pass
@@ -175,17 +178,17 @@ modules:
       # ---- Electron Forge package ----------------------------------------
       # Belt-and-suspenders: explicitly copy (not symlink) the pre-fetched
       # Electron zip into the @electron/get cache hash directory.
-      # Cache key = sha256("https://github.com/electron/electron/releases/download/v39.8.10")
+      # Cache key = sha256("https://github.com/electron/electron/releases/download/v43.7.6")
       - |
-        EHASH=41a5d68646d956d50e13830e121ea0b3d6ab378b6a0ce422aefc1ff214707879
+        EHASH=839b6db86ad94d1d797347ae0b317933b6575fe66906be5f4ba9437c891b0c53
         ECACHE=flatpak-node/cache/electron
         mkdir -p "$ECACHE/$EHASH"
         case "$FLATPAK_ARCH" in
-          aarch64) EZIP="electron-v39.8.10-linux-arm64.zip" ;;
-          *)       EZIP="electron-v39.8.10-linux-x64.zip"   ;;
+          aarch64) EZIP="electron-v43.7.6-linux-arm64.zip" ;;
+          *)       EZIP="electron-v43.7.6-linux-x64.zip"   ;;
         esac
         cp "$ECACHE/$EZIP" "$ECACHE/$EHASH/$EZIP" || true
-        cp "$ECACHE/SHASUMS256.txt-39.8.10" "$ECACHE/$EHASH/SHASUMS256.txt" || true
+        cp "$ECACHE/SHASUMS256.txt-43.7.6" "$ECACHE/$EHASH/SHASUMS256.txt" || true
 
       # Runs the webpack main + renderer builds, then packages the result into
       # applications/pass-desktop/out/Proton Pass-linux-x64/
@@ -237,8 +240,8 @@ modules:
       # the root pnpm-lock.yaml covers all workspaces.
       - type: git
         url: https://github.com/ProtonMail/WebClients.git
-        tag: proton-pass@1.42.0
-        commit: 08bbb1ccdaeeabdad8a831932a148b12ad5dc2b1
+        tag: proton-pass@1.43.0
+        commit: 76fab00d97cdfda7db4aea0adbd6dd22c710ec03
         x-checker-data:
           type: json
           url: https://proton.me/download/PassDesktop/linux/x64/version.json
@@ -249,13 +252,15 @@ modules:
       # Pre-built standalone pnpm executable
       - type: archive
         url: https://registry.npmjs.org/@pnpm/exe.linux-x64/-/exe.linux-x64-12.8.1.tgz
-        sha512: f1b0d9d2566509d8b6aef9c5ba5ec4620702ef329e5927bbeb2f09576a17a1b692f29f62f5de8f49fe8b80bb533347c8ed1f4e87878b09bbde5f2343326bd9fa
+        sha512: 
+          f1b0d9d2566509d8b6aef9c5ba5ec4620702ef329e5927bbeb2f09576a17a1b692f29f62f5de8f49fe8b80bb533347c8ed1f4e87878b09bbde5f2343326bd9fa
         dest: pnpm-exe
         only-arches: [x86_64]
 
       - type: archive
         url: https://registry.npmjs.org/@pnpm/exe.linux-arm64/-/exe.linux-arm64-12.8.1.tgz
-        sha512: ab8b3d6bd5f63b737d69e505a285b6e28acdaf1beedb4fa3c9550547945a9cf0aa38a28f06b82cda2cb0324041c75697924cdd593e78fe67f3f017bcb0995613
+        sha512: 
+          ab8b3d6bd5f63b737d69e505a285b6e28acdaf1beedb4fa3c9550547945a9cf0aa38a28f06b82cda2cb0324041c75697924cdd593e78fe67f3f017bcb0995613
         dest: pnpm-exe
         only-arches: [aarch64]
 
