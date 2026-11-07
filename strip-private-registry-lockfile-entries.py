@@ -15,6 +15,11 @@ to Proton's private npm registries:
     @proton/proton-foundation-search
                      → https://nexus.protontech.ch/repository/foundation-npm/
     @tpe/*           → https://gitlab.protontech.ch/.../packages/npm/
+    @protontech/logger
+                     → https://nexus.protontech.ch/repository/web-npm-private-and-public/
+                       (declared by packages/components and packages/shared but
+                       not imported by Pass; the manifest drops it before install.
+                       https://github.com/ProtonMail/WebClients/issues/554)
 
 It also contains xlsx resolved from https://cdn.sheetjs.com/, used only by
 applications/lumo. flatpak-node-generator looks that version up on npm, where
@@ -71,6 +76,7 @@ def strip_private_pnpm_lockfile_entries(lines: list[str]) -> list[str]:
                 "@proton-meet/" in header
                 or "@tpe/" in header
                 or "@proton/proton-foundation-search" in header
+                or header.startswith("'@protontech/logger@")
                 or "xlsx@https://cdn.sheetjs.com/" in header
                 or "nexus.protontech.ch" in stanza
                 or "gitlab.protontech.ch" in stanza
