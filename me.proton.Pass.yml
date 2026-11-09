@@ -143,31 +143,6 @@ modules:
         pathlib.Path('pnpm-workspace.yaml').write_text(text)
         "
 
-      # @protontech/logger is only on Proton's private registry and Pass
-      # doesn't import it. Drop it until it's public:
-      # https://github.com/ProtonMail/WebClients/issues/554
-      - |
-        python3 - << 'PYEOF'
-        import json, pathlib, re
-        n = 0
-        for p in list(pathlib.Path('applications').glob('*/package.json')) + list(pathlib.Path('packages').glob('*/package.json')):
-            d = json.loads(p.read_text())
-            hit = False
-            for k in ('dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'):
-                if '@protontech/logger' in d.get(k, {}):
-                    del d[k]['@protontech/logger']; hit = True
-            if hit:
-                p.write_text(json.dumps(d, indent=4) + '\n'); n += 1; print('stripped', p)
-        lock = pathlib.Path('pnpm-lock.yaml')
-        t = lock.read_text()
-        t, a = re.subn(r"\n      '@protontech/logger':\n        specifier: [^\n]*\n        version: [^\n]*", '', t)
-        t, b = re.subn(r"\n  '@protontech/logger@[^']*':\n(?:    [^\n]*\n)*", '\n', t)
-        lock.write_text(t)
-        print(f'package.json: {n}, lock importers: {a}, lock stanzas: {b}')
-        assert n and a and b, 'no @protontech/logger found: workaround may no longer be needed'
-        assert 'protontech/logger' not in t, 'logger still in lockfile'
-        PYEOF
-
       # ---- JavaScript / TypeScript dependencies --------------------------
       # Install packages needed for pass-desktop from the offline pnpm store.
       # Filtering to proton-pass-desktop and native skips private workspaces
@@ -248,8 +223,8 @@ modules:
       # the root pnpm-lock.yaml covers all workspaces.
       - type: git
         url: https://github.com/ProtonMail/WebClients.git
-        tag: proton-pass@1.43.0
-        commit: 3414a254fac3e48e8a23581c144d5782ae100317
+        tag: proton-pass@1.43.1
+        commit: 559cd8779ecceff3d5a8800e3906c615e0aec6ca
         x-checker-data:
           type: json
           url: https://proton.me/download/PassDesktop/linux/x64/version.json
