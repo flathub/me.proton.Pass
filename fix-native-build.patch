@@ -1,6 +1,7 @@
---- a/applications/pass-desktop/native/build.js	2026-04-12 22:38:26.737679204 -0400
-+++ b/applications/pass-desktop/native/build.js	2026-05-23 00:00:00.000000000 +0000
-@@ -7,18 +7,20 @@
+--- a/applications/pass-desktop/native/build.js
++++ b/applications/pass-desktop/native/build.js
+@@ -6,11 +6,14 @@
+             return ['x86_64-pc-windows-msvc'];
          case 'darwin':
              return ['x86_64-apple-darwin', 'aarch64-apple-darwin'];
 -        case 'linux':
@@ -19,10 +20,13 @@
      }
  })();
  
+@@ -19,8 +22,7 @@
+ const env = process.platform === 'darwin' ? { ...process.env, CARGO_PROFILE_RELEASE_STRIP: 'none' } : process.env;
+ 
  for (const target of targets) {
 -    // Ensure rust target
 -    execSync(`rustup target add ${target}`, { stdio: 'inherit' });
 +    // Flatpak SDK already includes the required Rust target.
      // Build napi bindings
-     execSync(`npm run build:napi -- --target ${target}`, { stdio: 'inherit' });
+     execSync(`npm run build:napi -- --target ${target}`, { stdio: 'inherit', env });
      // Build rust host
