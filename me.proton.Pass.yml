@@ -32,8 +32,8 @@ modules:
     cleanup: ['*']
     sources:
       - type: archive
-        url: https://gitlab.freedesktop.org/dbus/dbus/-/archive/dbus-1.16.2/dbus-dbus-1.16.2.tar.gz
-        sha256: d77cc71acd93e85f2bd2a6fe3a40e5bd023519e3e9fa9b5361e7109f42b74060
+        url: https://gitlab.freedesktop.org/dbus/dbus/-/archive/dbus-1.16.4/dbus-dbus-1.16.4.tar.gz
+        sha256: 6ad2d06177510f9294fd3f442a141433c5316d0d0ed7033a2bd7ae90e55e1dac
         x-checker-data:
           type: anitya
           project-id: 5356
