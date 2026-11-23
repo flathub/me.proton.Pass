@@ -223,8 +223,8 @@ modules:
       # the root pnpm-lock.yaml covers all workspaces.
       - type: git
         url: https://github.com/ProtonMail/WebClients.git
-        tag: proton-pass@1.44.0
-        commit: c890377cb5da6c2041941cb67557e3ec367638a5
+        tag: proton-pass@1.44.1
+        commit: 22f0d68344164995b5e52367bb6359d84770f719
         x-checker-data:
           type: json
           url: https://proton.me/download/PassDesktop/linux/x64/version.json
